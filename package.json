@@ -4,11 +4,12 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "prisma generate && next build",
     "start": "next start",
     "lint": "next lint",
     "tw:build": "tailwindcss -i ./src/app/globals.css -o ./dist/output.css --watch",
-    "tw:init": "tailwindcss init -p"
+    "tw:init": "tailwindcss init -p",
+    "prisma:generate": "prisma generate"
   },
   "dependencies": {
     "@fontsource/cairo": "^5.2.7",
@@ -21,7 +22,8 @@
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "socket.io": "^4.8.1",
-    "uuid": "^13.0.0"
+    "uuid": "^13.0.0",
+    "prisma": "^6.16.2"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
