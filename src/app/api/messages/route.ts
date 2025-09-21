@@ -53,9 +53,9 @@ export async function GET(request: NextRequest) {
     })
 
     // فك تشفير الرسائل
-    const decryptedMessages = messages.map(message => ({
+    const decryptedMessages = messages.map((message: { encrypted: any; content: string }) => ({
       ...message,
-      content: message.encrypted ? decrypt(JSON.parse(message.content)) : message.content
+      content: message.encrypted ? encrypt(JSON.parse(message.content)) : message.content
     }))
 
     return NextResponse.json({

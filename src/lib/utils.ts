@@ -1,5 +1,7 @@
 // src/lib/utils.ts
 import crypto from 'crypto'
+import { config } from 'dotenv'
+config()
 
 const algorithm = 'aes-256-gcm'
 const secretKey = process.env.ENCRYPTION_KEY || 'default-secret-key-32-chars-long!'

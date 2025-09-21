@@ -1,22 +1,25 @@
-// scripts/test-connection.ts
-import { PrismaClient } from '@prisma/client'
+import { prisma } from "@/lib/prisma";
+import { config } from 'dotenv'
+config()
 
-const prisma = new PrismaClient()
-
+// scripts/test-connection.js
 async function testConnection() {
   try {
-    await prisma.$connect()
-    console.log('✅ تم الاتصال بقاعدة البيانات بنجاح!')
+    // استيراد prisma بطريقة CommonJS
+    const { prisma } = require('../src/lib/prisma');
+    
+    await prisma.$connect();
+    console.log('✅ تم الاتصال بقاعدة البيانات بنجاح!');
     
     // اختبار استعلام بسيط
-    const result = await prisma.$queryRaw`SELECT version()`
-    console.log('إصدار PostgreSQL:', result)
+    const users = await prisma.user.findMany();
+    console.log(`📊 عدد المستخدمين: ${users.length}`);
     
   } catch (error) {
-    console.error('❌ فشل الاتصال بقاعدة البيانات:', error)
+    console.error('❌ فشل الاتصال بقاعدة البيانات:', error);
   } finally {
-    await prisma.$disconnect()
+    await prisma.$disconnect();
   }
 }
 
-testConnection()
+testConnection();
