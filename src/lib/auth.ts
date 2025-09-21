@@ -3,10 +3,8 @@ import type { NextAuthOptions } from 'next-auth'
 import CredentialsProvider from 'next-auth/providers/credentials'
 import { prisma } from './prisma'
 import bcrypt from 'bcryptjs'
-import NextAuth from 'next-auth'
 
-// تعريف authOptions مرة واحدة فقط
-const authOptions: NextAuthOptions = {
+export const authOptions: NextAuthOptions = {
   providers: [
     CredentialsProvider({
       id: 'credentials',
@@ -20,7 +18,6 @@ const authOptions: NextAuthOptions = {
           throw new Error('البريد الإلكتروني وكلمة المرور مطلوبان')
         }
 
-        // البحث عن المستخدم في قاعدة البيانات
         const user = await prisma.user.findUnique({
           where: {
             email: credentials.email.toLowerCase()
@@ -31,7 +28,6 @@ const authOptions: NextAuthOptions = {
           throw new Error('البريد الإلكتروني أو كلمة المرور غير صحيحة')
         }
 
-        // مقارنة كلمة المرور
         const isPasswordValid = await bcrypt.compare(
           credentials.password,
           user.password
@@ -41,7 +37,6 @@ const authOptions: NextAuthOptions = {
           throw new Error('البريد الإلكتروني أو كلمة المرور غير صحيحة')
         }
 
-        // إرجاع بيانات المستخدم بدون كلمة المرور
         return {
           id: user.id,
           email: user.email,
@@ -72,16 +67,11 @@ const authOptions: NextAuthOptions = {
     signIn: '/login',
     error: '/login',
   },
-  debug: process.env.NODE_ENV === 'development',
 }
 
-// إنشاء instance من NextAuth وتصدير الدوال المطلوبة
-const { auth, signIn, signOut } = NextAuth(authOptions)
+// إزالة استدعاء NextAuth() من هنا لتجنب المشاكل
+// التصدير فقط لـ authOptions
 
-// تصدير الدوال والكائنات مرة واحدة فقط
-export { auth, signIn, signOut, authOptions }
-
-// تعريف أنواع TypeScript
 declare module 'next-auth' {
   interface Session {
     user: {

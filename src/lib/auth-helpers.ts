@@ -1,24 +1,15 @@
-import { prisma } from './prisma'
-import bcrypt from 'bcryptjs'
+import { getServerSession } from 'next-auth/next'
+import { authOptions } from './auth'
 
-export async function authenticateUser(email: string, password: string) {
-  try {
-    const user = await prisma.user.findUnique({
-      where: { email: email.toLowerCase() }
-    })
+export async function getCurrentUser() {
+  const session = await getServerSession(authOptions)
+  return session?.user || null
+}
 
-    if (!user) return null
-
-    const isPasswordValid = await bcrypt.compare(password, user.password)
-    if (!isPasswordValid) return null
-
-    return {
-      id: user.id,
-      email: user.email,
-      name: user.name
-    }
-  } catch (error) {
-    console.error('Authentication error:', error)
-    return null
+export async function requireAuth() {
+  const user = await getCurrentUser()
+  if (!user) {
+    throw new Error('غير مصرح')
   }
+  return user
 }
