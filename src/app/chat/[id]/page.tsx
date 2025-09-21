@@ -3,25 +3,30 @@ import { useAuth } from '@/context/AuthContext'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 
-export default function ChatPage({ params }: { params: { id: string } }) {
+interface ChatPageProps {
+  params: Promise<{ id: string }>
+}
+
+export default function ChatPage({ params }: ChatPageProps) {
   const { user } = useAuth()
   const router = useRouter()
+  const [chatId, setChatId] = useState('')
   const [messages, setMessages] = useState([
     { id: 1, text: 'مرحباً! كيف حالك؟', sender: 'other', time: '10:30' },
     { id: 2, text: 'أنا بخير، شكراً لك!', sender: 'me', time: '10:31' },
     { id: 3, text: 'كيف سارت الأمور اليوم؟', sender: 'other', time: '10:32' }
   ])
   const [newMessage, setNewMessage] = useState('')
-  // إضافة ميزات متقدمة للدردشة
-const [typing, setTyping] = useState(false)
 
-// مؤشر الكتابة
-useEffect(() => {
-  const timer = setTimeout(() => {
-    setTyping(false)
-  }, 1000)
-  return () => clearTimeout(timer)
-}, [newMessage])
+  useEffect(() => {
+    // حل الـ Promise للحصول على params
+    params.then(resolvedParams => {
+      setChatId(resolvedParams.id)
+    }).catch(error => {
+      console.error('Error resolving params:', error)
+    })
+  }, [params])
+
   useEffect(() => {
     if (!user) {
       router.push('/login')
@@ -52,7 +57,7 @@ useEffect(() => {
           >
             ←
           </button>
-          <h2 style={{ margin: 0 }}>المحادثة {params.id}</h2>
+          <h2 style={{ margin: 0 }}>المحادثة {chatId}</h2>
         </div>
 
         <div style={{ height: '400px', overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '20px' }}>

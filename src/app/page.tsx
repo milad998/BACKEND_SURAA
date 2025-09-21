@@ -61,13 +61,49 @@ export default function Home() {
           <h3 className="card-header">الوسائط الحديثة</h3>
           <div className="media-grid">
             <div className="media-item">
-              <img src="/api/placeholder/150/100" alt="صورة" />
+              <div style={{
+                width: '100%',
+                height: '100px',
+                backgroundColor: '#e5e7eb',
+                borderRadius: '8px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#6b7280',
+                fontSize: '14px'
+              }}>
+                صورة
+              </div>
             </div>
             <div className="media-item">
-              <img src="/api/placeholder/150/100" alt="صورة" />
+              <div style={{
+                width: '100%',
+                height: '100px',
+                backgroundColor: '#e5e7eb',
+                borderRadius: '8px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#6b7280',
+                fontSize: '14px'
+              }}>
+                فيديو
+              </div>
             </div>
             <div className="media-item">
-              <img src="/api/placeholder/150/100" alt="صورة" />
+              <div style={{
+                width: '100%',
+                height: '100px',
+                backgroundColor: '#e5e7eb',
+                borderRadius: '8px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#6b7280',
+                fontSize: '14px'
+              }}>
+                صوت
+              </div>
             </div>
           </div>
         </div>

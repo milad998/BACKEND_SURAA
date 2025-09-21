@@ -1,10 +1,9 @@
-// src/app/api/chats/route.ts
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     const session = await getServerSession(authOptions)
     
@@ -48,6 +47,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(chats)
   } catch (error) {
+    console.error('Chats fetch error:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-export async function POST(request: NextRequest) {
+export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions)
     
@@ -66,7 +66,6 @@ export async function POST(request: NextRequest) {
     const { userIds, name, type } = await request.json()
     const allUserIds = [session.user.id, ...userIds]
 
-    // التحقق من وجود محادثة خاصة بالفعل
     if (type === 'PRIVATE' && userIds.length === 1) {
       const existingChat = await prisma.chat.findFirst({
         where: {
@@ -118,6 +117,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(chat, { status: 201 })
   } catch (error) {
+    console.error('Chat creation error:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
