@@ -53,10 +53,16 @@ export async function GET(request: NextRequest) {
     })
 
     // فك تشفير الرسائل
-    const decryptedMessages = messages.map((message: { encrypted: any; content: string }) => ({
+      type Message = {
+      encrypted: boolean;
+      content: string;
+    };
+
+    const decryptedMessages = messages.map((message: Message) => ({
       ...message,
       content: message.encrypted ? encrypt(JSON.parse(message.content)) : message.content
-    }))
+    }));
+
 
     return NextResponse.json({
       messages: decryptedMessages.reverse(),

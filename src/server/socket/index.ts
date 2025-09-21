@@ -1,5 +1,5 @@
 // src/server/socket/index.ts
-import { Server as NetServer } from 'http'
+import { IncomingMessage, Server as NetServer, Server, ServerResponse } from 'http'
 import { NextApiRequest } from 'next'
 import { Server as SocketIOServer } from 'socket.io'
 import { NextApiResponseServerIO } from '@/types'
@@ -16,7 +16,10 @@ export default async function socketHandler(
 ) {
   if (!res.socket.server.io) {
     const path = '/api/socket/io'
-    const httpServer: NetServer = res.socket.server as any
+    const httpServer = res.socket.server as unknown as Server<typeof IncomingMessage, typeof ServerResponse>
+
+
+
     const io = new SocketIOServer(httpServer, {
       path: path,
       addTrailingSlash: false,
