@@ -3,6 +3,7 @@ import type { NextAuthOptions } from 'next-auth'
 import CredentialsProvider from 'next-auth/providers/credentials'
 import { prisma } from './prisma'
 import bcrypt from 'bcryptjs'
+import NextAuth from 'next-auth'
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -49,13 +50,20 @@ export const authOptions: NextAuthOptions = {
     session: async ({ session, token }) => {
       if (session?.user && token?.sub) {
         session.user.id = token.sub
+        session.user.accessToken = token.accessToken
       }
       return session
     },
-    jwt: async ({ user, token }) => {
+    jwt: async ({ user, token, trigger, session }) => {
       if (user) {
         token.uid = user.id
+        token.accessToken = generateAccessToken(user.id)
       }
+      
+      if (trigger === "update" && session?.accessToken) {
+        token.accessToken = session.accessToken
+      }
+      
       return token
     },
   },
@@ -67,10 +75,27 @@ export const authOptions: NextAuthOptions = {
     signIn: '/login',
     error: '/login',
   },
+  jwt: {
+    maxAge: 30 * 24 * 60 * 60, // 30 يوم
+  },
 }
 
-// إزالة استدعاء NextAuth() من هنا لتجنب المشاكل
-// التصدير فقط لـ authOptions
+// دالة لتوليد JWT Token
+function generateAccessToken(userId: string): string {
+  // يمكنك استخدام مكتبة مثل jsonwebtoken هنا
+  // للتبسيط، سنستخدم توليد بسيط
+  const payload = {
+    userId: userId,
+    timestamp: Date.now(),
+    exp: Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60) // 30 يوم
+  }
+  return Buffer.from(JSON.stringify(payload)).toString('base64')
+}
+
+// إنشاء instance من NextAuth وتصدير الدوال
+const { auth, signIn, signOut, unstable_update } = NextAuth(authOptions)
+
+export { auth, signIn, signOut, unstable_update }
 
 declare module 'next-auth' {
   interface Session {
@@ -78,7 +103,9 @@ declare module 'next-auth' {
       id: string
       email: string
       name: string
+      accessToken?: string
     }
+    accessToken?: string
   }
   
   interface User {
@@ -86,10 +113,9 @@ declare module 'next-auth' {
     email: string
     name: string
   }
-}
-
-declare module 'next-auth/jwt' {
+  
   interface JWT {
     uid: string
+    accessToken?: string
   }
-}
+    }
