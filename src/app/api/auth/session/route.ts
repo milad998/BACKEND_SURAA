@@ -11,13 +11,16 @@ export async function GET() {
       return NextResponse.json({ user: null }, { status: 200 })
     }
 
+    // استخدام type assertion للوصول إلى accessToken
+    const sessionWithToken = session as any
+
     return NextResponse.json({
       user: {
         id: session.user.id,
         email: session.user.email,
         name: session.user.name
       },
-      accessToken: session.user.accessToken
+      accessToken: sessionWithToken.accessToken
     }, { status: 200 })
 
   } catch (error) {
