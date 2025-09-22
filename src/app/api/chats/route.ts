@@ -1,58 +1,49 @@
+// src/app/api/chats/route.ts
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth/next'
-import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { getUserFromToken } from '@/lib/auth-utils'
 
-export async function GET() {
+// دالة GET لجلب المحادثات الموجودة
+export async function GET(request: Request) {
   try {
-    const session = await getServerSession(authOptions)
+    const authHeader = request.headers.get('authorization')
     
-    if (!session) {
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // جلب جميع المحادثات الخاصة بالمستخدم
+    const token = authHeader.replace('Bearer ', '')
+    const user = await getUserFromToken(token)
+
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const chats = await prisma.chat.findMany({
       where: {
         users: {
-          some: {
-            userId: session.user.id
-          }
+          some: { userId: user.id }
         }
       },
       include: {
         users: {
           include: {
             user: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-                avatar: true,
-                status: true
-              }
+              select: { id: true, name: true, email: true, avatar: true, status: true }
             }
           }
         },
         messages: {
           take: 1,
-          orderBy: {
-            createdAt: 'desc'
-          },
+          orderBy: { createdAt: 'desc' },
           include: {
             sender: {
-              select: {
-                id: true,
-                name: true,
-                avatar: true
-              }
+              select: { id: true, name: true, avatar: true }
             }
           }
         }
       },
-      orderBy: {
-        updatedAt: 'desc'
-      }
+      orderBy: { updatedAt: 'desc' }
     })
 
     return NextResponse.json(chats)
@@ -65,17 +56,25 @@ export async function GET() {
   }
 }
 
+// دالة POST لإنشاء محادثة جديدة - تأكد من وجود هذا التصدير
 export async function POST(request: Request) {
   try {
-    const session = await getServerSession(authOptions)
+    const authHeader = request.headers.get('authorization')
     
-    if (!session) {
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const token = authHeader.replace('Bearer ', '')
+    const user = await getUserFromToken(token)
+
+    if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const { userIds, name, type = 'PRIVATE' } = await request.json()
 
-    // التحقق من وجود البيانات المطلوبة
+    // التحقق من البيانات
     if (!userIds || !Array.isArray(userIds)) {
       return NextResponse.json(
         { error: 'User IDs are required and must be an array' },
@@ -83,19 +82,17 @@ export async function POST(request: Request) {
       )
     }
 
-    // إضافة المستخدم الحالي إلى قائمة المستخدمين
-    const allUserIds = [session.user.id, ...userIds]
+    // إضافة المستخدم الحالي إلى المحادثة
+    const allUserIds = [user.id, ...userIds]
 
-    // التحقق من عدم وجود محادثة مكررة (للمحادثات الخاصة)
+    // التحقق من محادثة خاصة مكررة
     if (type === 'PRIVATE' && userIds.length === 1) {
       const existingChat = await prisma.chat.findFirst({
         where: {
           type: 'PRIVATE',
           users: {
             every: {
-              userId: {
-                in: allUserIds
-              }
+              userId: { in: allUserIds }
             }
           }
         },
@@ -103,11 +100,7 @@ export async function POST(request: Request) {
           users: {
             include: {
               user: {
-                select: {
-                  id: true,
-                  name: true,
-                  email: true
-                }
+                select: { id: true, name: true, email: true }
               }
             }
           }
@@ -146,14 +139,13 @@ export async function POST(request: Request) {
         },
         messages: {
           take: 1,
-          orderBy: {
-            createdAt: 'desc'
-          }
+          orderBy: { createdAt: 'desc' }
         }
       }
     })
 
     return NextResponse.json(chat, { status: 201 })
+
   } catch (error) {
     console.error('Chat creation error:', error)
     return NextResponse.json(
@@ -161,4 +153,4 @@ export async function POST(request: Request) {
       { status: 500 }
     )
   }
-  }
+}

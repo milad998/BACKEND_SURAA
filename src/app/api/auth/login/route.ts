@@ -1,6 +1,8 @@
 // src/app/api/auth/login/route.ts
 import { NextRequest, NextResponse } from 'next/server'
-import { signIn } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
+import bcrypt from 'bcryptjs'
+import { generateToken } from '@/lib/auth-utils'
 
 export async function POST(request: NextRequest) {
   try {
@@ -13,40 +15,39 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // استخدام signIn من NextAuth
-    const result = await signIn('credentials', {
-      email,
-      password,
-      redirect: false,
+    // البحث عن المستخدم
+    const user = await prisma.user.findUnique({
+      where: { email: email.toLowerCase() }
     })
 
-    if (result?.error) {
+    if (!user) {
       return NextResponse.json(
         { error: 'البريد الإلكتروني أو كلمة المرور غير صحيحة' },
         { status: 401 }
       )
     }
 
-    // الحصول على الجلسة بعد تسجيل الدخول الناجح
-    const { auth } = await import('@/lib/auth')
-    const session = await auth()
-    
-    if (!session?.user) {
+    // التحقق من كلمة المرور
+    const isPasswordValid = await bcrypt.compare(password, user.password)
+    if (!isPasswordValid) {
       return NextResponse.json(
-        { error: 'فشل في إنشاء الجلسة' },
-        { status: 500 }
+        { error: 'البريد الإلكتروني أو كلمة المرور غير صحيحة' },
+        { status: 401 }
       )
     }
 
-    // إرجاع بيانات المستخدم مع Token
+    // توليد Token
+    const accessToken = generateToken(user.id)
+
     return NextResponse.json({
       message: 'تم تسجيل الدخول بنجاح',
       user: {
-        id: session.user.id,
-        email: session.user.email,
-        name: session.user.name
+        id: user.id,
+        email: user.email,
+        name: user.name
       },
-      accessToken: session.user.accessToken || generateSimpleToken(session.user.id),
+      accessToken: accessToken,
+      tokenType: 'Bearer',
       expiresIn: '30d'
     }, { status: 200 })
 
@@ -58,13 +59,3 @@ export async function POST(request: NextRequest) {
     )
   }
 }
-
-// دالة مساعدة لتوليد Token بسيط (للاختبار)
-function generateSimpleToken(userId: string): string {
-  const tokenData = {
-    userId: userId,
-    timestamp: Date.now(),
-    type: 'access'
-  }
-  return Buffer.from(JSON.stringify(tokenData)).toString('base64')
-        }

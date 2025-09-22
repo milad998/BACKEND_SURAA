@@ -1,15 +1,21 @@
 // src/app/api/messages/route.ts
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth/next'
-import { authOptions } from '../../../lib/auth'
-import { prisma } from '../../../lib/prisma'
-import { encrypt } from '../../../lib/utils'
+import { prisma } from '@/lib/prisma'
+import { encrypt, decrypt } from '@/lib/utils'
+import { getUserFromToken } from '@/lib/auth-utils'
 
 export async function GET(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions)
+    const authHeader = request.headers.get('authorization')
     
-    if (!session) {
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const token = authHeader.replace('Bearer ', '')
+    const user = await getUserFromToken(token)
+
+    if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -25,6 +31,25 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    // التحقق من أن المستخدم عضو في المحادثة
+    const chat = await prisma.chat.findFirst({
+      where: {
+        id: chatId,
+        users: {
+          some: {
+            userId: user.id
+          }
+        }
+      }
+    })
+
+    if (!chat) {
+      return NextResponse.json(
+        { error: 'Chat not found or access denied' },
+        { status: 404 }
+      )
+    }
+
     const messages = await prisma.message.findMany({
       where: {
         chatId,
@@ -32,13 +57,6 @@ export async function GET(request: NextRequest) {
       },
       include: {
         sender: {
-          select: {
-            id: true,
-            name: true,
-            avatar: true
-          }
-        },
-        receiver: {
           select: {
             id: true,
             name: true,
@@ -53,22 +71,17 @@ export async function GET(request: NextRequest) {
     })
 
     // فك تشفير الرسائل
-      type Message = {
-      encrypted: boolean;
-      content: string;
-    };
-
-    const decryptedMessages = messages.map((message: Message) => ({
+    const decryptedMessages = messages.map(message => ({
       ...message,
-      content: message.encrypted ? encrypt(JSON.parse(message.content)) : message.content
-    }));
-
+      content: message.encrypted ? decrypt(JSON.parse(message.content)) : message.content
+    }))
 
     return NextResponse.json({
       messages: decryptedMessages.reverse(),
       nextCursor: messages.length === limit ? messages[messages.length - 1].id : null
     })
   } catch (error) {
+    console.error('Error fetching messages:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
@@ -78,37 +91,75 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions)
+    const authHeader = request.headers.get('authorization')
     
-    if (!session) {
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { content, chatId, type, receiverId, encrypted = true } = await request.json()
+    const token = authHeader.replace('Bearer ', '')
+    const user = await getUserFromToken(token)
 
-    let encryptedContent = content
-    if (encrypted) {
-      encryptedContent = JSON.stringify(encrypt(content))
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    const { content, chatId, type = 'TEXT', receiverId, encrypted = true } = await request.json()
+
+    // التحقق من البيانات المطلوبة
+    if (!content || !chatId) {
+      return NextResponse.json(
+        { error: 'Content and Chat ID are required' },
+        { status: 400 }
+      )
+    }
+
+    // التحقق من أن المستخدم عضو في المحادثة
+    const chat = await prisma.chat.findFirst({
+      where: {
+        id: chatId,
+        users: {
+          some: {
+            userId: user.id
+          }
+        }
+      }
+    })
+
+    if (!chat) {
+      return NextResponse.json(
+        { error: 'Chat not found or access denied' },
+        { status: 404 }
+      )
+    }
+
+    // استخدام let بدلاً من const للتحكم في التشفير
+    let shouldEncrypt = encrypted
+    let finalContent = content
+
+    if (shouldEncrypt) {
+      try {
+        const encryptedData = encrypt(content)
+        finalContent = JSON.stringify(encryptedData)
+      } catch (error) {
+        console.error('Encryption failed, sending as plain text:', error)
+        shouldEncrypt = false  // ← الآن يمكن التعديل لأنه let
+        finalContent = content
+      }
+    }
+
+    // إنشاء الرسالة
     const message = await prisma.message.create({
       data: {
-        content: encryptedContent,
+        content: finalContent,
         type,
-        encrypted,
-        senderId: session.user.id,
+        encrypted: shouldEncrypt,  // ← استخدام المتغير المعدل
+        senderId: user.id,
         receiverId: receiverId || null,
         chatId
       },
       include: {
         sender: {
-          select: {
-            id: true,
-            name: true,
-            avatar: true
-          }
-        },
-        receiver: {
           select: {
             id: true,
             name: true,
@@ -124,8 +175,15 @@ export async function POST(request: NextRequest) {
       data: { updatedAt: new Date() }
     })
 
-    return NextResponse.json(message, { status: 201 })
+    // إرجاع الرسالة مع المحتوى الأصلي (غير مشفر) للعرض الفوري
+    const responseMessage = {
+      ...message,
+      content: shouldEncrypt ? content : message.content
+    }
+
+    return NextResponse.json(responseMessage, { status: 201 })
   } catch (error) {
+    console.error('Error creating message:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

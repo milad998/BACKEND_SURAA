@@ -2,6 +2,8 @@
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
+import { config } from 'dotenv'
+config()
 
 export async function GET() {
   try {

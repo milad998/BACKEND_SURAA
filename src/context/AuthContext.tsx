@@ -36,11 +36,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const checkUserSession = async () => {
     try {
-      const response = await fetch('/api/auth/session')
-      const data = await response.json()
+      const token = localStorage.getItem('token')
+      if (!token) {
+        setLoading(false)
+        return
+      }
+
+      const response = await fetch('/api/auth/verify', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
       
-      if (data.user) {
-        setUser(data.user)
+      if (response.ok) {
+        const data = await response.json()
+        if (data.user) {
+          setUser(data.user)
+        }
       }
     } catch (error) {
       console.error('Error checking session:', error)
@@ -62,6 +74,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (response.ok) {
         const data = await response.json()
         setUser(data.user)
+        localStorage.setItem('token', data.accessToken)
         return true
       }
       return false
@@ -91,14 +104,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   }
 
-  const logout = async () => {
-    try {
-      await fetch('/api/auth/logout', { method: 'POST' })
-    } catch (error) {
-      console.error('Logout error:', error)
-    } finally {
-      setUser(null)
-    }
+  const logout = () => {
+    setUser(null)
+    localStorage.removeItem('token')
   }
 
   const value = {
