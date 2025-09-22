@@ -5,7 +5,8 @@ import { prisma } from './prisma'
 import bcrypt from 'bcryptjs'
 import NextAuth from 'next-auth'
 
-export const authOptions: NextAuthOptions = {
+// تعريف authOptions كـ const بدلاً من export
+const authOptions: NextAuthOptions = {
   providers: [
     CredentialsProvider({
       id: 'credentials',
@@ -85,6 +86,7 @@ function generateAccessToken(userId: string): string {
 
 const { auth, signIn, signOut } = NextAuth(authOptions)
 
+// التصدير مرة واحدة فقط
 export { auth, signIn, signOut, authOptions }
 
 // تعريف الأنواع الممتدة
@@ -110,4 +112,4 @@ declare module 'next-auth/jwt' {
     uid: string
     accessToken?: string
   }
-}
+    }
