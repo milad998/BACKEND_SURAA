@@ -11,6 +11,7 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // جلب جميع المحادثات الخاصة بالمستخدم
     const chats = await prisma.chat.findMany({
       where: {
         users: {
@@ -37,6 +38,15 @@ export async function GET() {
           take: 1,
           orderBy: {
             createdAt: 'desc'
+          },
+          include: {
+            sender: {
+              select: {
+                id: true,
+                name: true,
+                avatar: true
+              }
+            }
           }
         }
       },
@@ -63,9 +73,20 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { userIds, name, type } = await request.json()
+    const { userIds, name, type = 'PRIVATE' } = await request.json()
+
+    // التحقق من وجود البيانات المطلوبة
+    if (!userIds || !Array.isArray(userIds)) {
+      return NextResponse.json(
+        { error: 'User IDs are required and must be an array' },
+        { status: 400 }
+      )
+    }
+
+    // إضافة المستخدم الحالي إلى قائمة المستخدمين
     const allUserIds = [session.user.id, ...userIds]
 
+    // التحقق من عدم وجود محادثة مكررة (للمحادثات الخاصة)
     if (type === 'PRIVATE' && userIds.length === 1) {
       const existingChat = await prisma.chat.findFirst({
         where: {
@@ -79,7 +100,17 @@ export async function POST(request: Request) {
           }
         },
         include: {
-          users: true
+          users: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true
+                }
+              }
+            }
+          }
         }
       })
 
@@ -88,9 +119,10 @@ export async function POST(request: Request) {
       }
     }
 
+    // إنشاء المحادثة الجديدة
     const chat = await prisma.chat.create({
       data: {
-        name,
+        name: type === 'GROUP' ? name : null,
         type,
         users: {
           create: allUserIds.map(userId => ({
@@ -111,6 +143,12 @@ export async function POST(request: Request) {
               }
             }
           }
+        },
+        messages: {
+          take: 1,
+          orderBy: {
+            createdAt: 'desc'
+          }
         }
       }
     })
@@ -123,4 +161,4 @@ export async function POST(request: Request) {
       { status: 500 }
     )
   }
-}
+  }
