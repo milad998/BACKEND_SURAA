@@ -312,8 +312,8 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
                           {formatTime(message.createdAt)}
                         </span>
                         {isMe && (
-                          <i className="fas fa-check ms-1"></i> {/* تم إصلاح هذا السطر */}
-                        )}
+                          <i className="fas fa-check ms-1"></i> // تم إصلاح هذا السطر
+                         )}
                       </div>
                     </div>
                   </div>
