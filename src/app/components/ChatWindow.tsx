@@ -46,7 +46,7 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
 
   // تحميل الصوت عند بدء التشغيل
   useEffect(() => {
-    audioRef.current = new Audio('/sounds/notification.mp3')
+    audioRef.current = new Audio('https://assets.mixkit.co/sfx/preview/mixkit-correct-answer-tone-2870.mp3')
     audioRef.current.preload = 'auto'
     
     return () => {
