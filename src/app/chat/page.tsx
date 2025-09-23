@@ -347,43 +347,7 @@ export default function ChatPage() {
               )}
             </div>
 
-            {/* معلومات المستخدم */}
-            <div className="p-3 border-top border-dark">
-              <div className="d-flex align-items-center">
-                <div 
-                  className="rounded-circle d-flex align-items-center justify-content-center text-white fw-bold me-3"
-                  style={{
-                    width: '44px',
-                    height: '44px',
-                    background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
-                    fontSize: '1rem'
-                  }}
-                >
-                  {getUserInitials(user.name)}
-                </div>
-                
-                <div className="dropdown">
-                  <button 
-                    className="btn btn-link dark-text dropdown-toggle p-0"
-                    type="button"
-                    data-bs-toggle="dropdown"
-                    style={{width: '32px', height: '32px'}}
-                  >
-                    <i className="fas fa-ellipsis-v"></i>
-                  </button>
-                  <ul className="dropdown-menu dropdown-menu-dark dropdown-menu-end">
-                    <li>
-                      <button className="dropdown-item" onClick={logout}>
-                        <i className="fas fa-sign-out-alt me-2"></i>
-                        تسجيل الخروج
-                      </button>
-                    </li>
-                  </ul>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+            
 
         {/* منطقة المحادثة */}
         <div className="col-md-8 col-lg-9 p-0">
@@ -394,21 +358,8 @@ export default function ChatPage() {
               onBack={() => setSelectedChat(null)}
             />
           ) : (
-            <div className="d-flex justify-content-center align-items-center h-100 dark-surface">
-              <div className="text-center dark-text-muted">
-                <div className="icon-wrapper mx-auto mb-4" style={{width: '120px', height: '120px'}}>
-                  <i className="fas fa-comments fa-3x"></i>
-                </div>
-                <h3 className="dark-text mb-3">مرحباً في تطبيق المحادثة</h3>
-                <p className="mb-4">اختر محادثة من القائمة لبدء الدردشة أو ابدأ محادثة جديدة</p>
-                <button 
-                  className="btn btn-primary rounded-pill px-4 py-2"
-                  onClick={() => setShowNewChatModal(true)}
-                >
-                  <i className="fas fa-plus me-2"></i>
-                  بدء محادثة جديدة
-                </button>
-              </div>
+            <div className="d-flex justify-content-center align-items-center dark-surface">
+              <p>ابداء التحدث مع الاصدقاء</p>
             </div>
           )}
         </div>
