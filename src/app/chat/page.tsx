@@ -498,4 +498,38 @@ export default function ChatPage() {
                       placeholder="أدخل اسمًا للمجموعة..."
                       value={groupName}
                       onChange={(e) => setGroupName(e.target.value)}
-       
+                    />
+                  </div>
+                )}
+              </div>
+              
+              <div className="modal-footer border-dark p-4">
+                <button 
+                  type="button" 
+                  className="btn btn-outline-secondary rounded-2 px-4"
+                  onClick={() => {
+                    setShowNewChatModal(false)
+                    setSelectedUsers([])
+                    setGroupName('')
+                    setModalSearchTerm('')
+                  }}
+                >
+                  إلغاء
+                </button>
+                <button 
+                  type="button" 
+                  className="btn btn-primary rounded-2 px-4"
+                  onClick={() => createNewChat(selectedUsers, groupName)}
+                  disabled={selectedUsers.length === 0 || (selectedUsers.length > 1 && !groupName.trim())}
+                >
+                  <i className="fas fa-plus me-2"></i>
+                  إنشاء محادثة
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
