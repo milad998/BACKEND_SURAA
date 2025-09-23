@@ -1,6 +1,16 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 
+interface User {
+  id: string
+  name: string
+  avatar?: string
+}
+
+interface ChatUser {
+  user: User
+}
+
 interface Message {
   id: string
   content: string
@@ -8,43 +18,77 @@ interface Message {
   type: string
   encrypted: boolean
   createdAt: string
-  sender: {
-    id: string
-    name: string
-    avatar?: string
-  }
+  sender: User
 }
 
 interface Chat {
   id: string
   name?: string
   type: string
-  users: any[]
+  users: ChatUser[]
 }
 
 interface ChatWindowProps {
   chat: Chat
-  currentUser: any
+  currentUser: User
   onBack: () => void
 }
 
 export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [newMessage, setNewMessage] = useState('')
-  const [loading, setLoading] = useState(false)
   const [sending, setSending] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const [lastMessageId, setLastMessageId] = useState<string | null>(null)
+  const [isSoundEnabled, setIsSoundEnabled] = useState(true)
 
+  // تحميل الصوت عند بدء التشغيل
+  useEffect(() => {
+    audioRef.current = new Audio('/notification.mp3')
+    audioRef.current.preload = 'auto'
+    
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause()
+        audioRef.current = null
+      }
+    }
+  }, [])
+
+  // جلب الرسائل وتحديثها كل 5 ثواني
   useEffect(() => {
     fetchMessages()
-    // تحديث الرسائل كل 5 ثواني
     const interval = setInterval(fetchMessages, 5000)
     return () => clearInterval(interval)
   }, [chat.id])
 
+  // التمرير إلى الأسفل عند تغيير الرسائل
   useEffect(() => {
     scrollToBottom()
   }, [messages])
+
+  // تشغيل الصوت عند وصول رسالة جديدة
+  useEffect(() => {
+    if (messages.length > 0 && audioRef.current && isSoundEnabled) {
+      const lastMessage = messages[messages.length - 1]
+      
+      // إذا كانت الرسالة جديدة وليست من المستخدم الحالي
+      if (lastMessage.id !== lastMessageId && lastMessage.senderId !== currentUser.id) {
+        playNotificationSound()
+        setLastMessageId(lastMessage.id)
+      }
+    }
+  }, [messages, lastMessageId, currentUser.id, isSoundEnabled])
+
+  const playNotificationSound = () => {
+    if (audioRef.current) {
+      audioRef.current.currentTime = 0
+      audioRef.current.play().catch((error) => {
+        console.log('Failed to play notification sound:', error)
+      })
+    }
+  }
 
   const fetchMessages = async () => {
     try {
@@ -99,27 +143,37 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }
 
-  const getChatName = () => {
+  const getChatName = (): string => {
     if (chat.type === 'PRIVATE') {
-      const otherUser = chat.users.find((u: any) => u.user.id !== currentUser.id)
+      const otherUser = chat.users.find((u: ChatUser) => u.user.id !== currentUser.id)
       return otherUser?.user.name || 'محادثة خاصة'
     }
     return chat.name || `مجموعة (${chat.users.length})`
   }
 
-  const getChatAvatar = () => {
+  const getChatAvatar = (): string => {
     if (chat.type === 'PRIVATE') {
-      const otherUser = chat.users.find((u: any) => u.user.id !== currentUser.id)
+      const otherUser = chat.users.find((u: ChatUser) => u.user.id !== currentUser.id)
       return otherUser?.user.avatar || '/default-avatar.png'
     }
     return '/group-avatar.png'
   }
 
-  const formatTime = (dateString: string) => {
+  const formatTime = (dateString: string): string => {
     return new Date(dateString).toLocaleTimeString('ar-EG', {
       hour: '2-digit',
       minute: '2-digit'
     })
+  }
+
+  const handleImageError = (e: React.SyntheticEvent<HTMLImageElement>) => {
+    e.currentTarget.src = '/default-avatar.png'
+  }
+
+  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      sendMessage()
+    }
   }
 
   return (
@@ -130,6 +184,7 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
           <button 
             className="btn btn-light btn-sm me-3 d-md-none"
             onClick={onBack}
+            aria-label="العودة"
           >
             <i className="fas fa-arrow-right"></i>
           </button>
@@ -141,9 +196,7 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
               className="rounded-circle me-3"
               width="40"
               height="40"
-              onError={(e) => {
-                e.currentTarget.src = '/default-avatar.png'
-              }}
+              onError={handleImageError}
             />
             <div>
               <h6 className="mb-0 fw-bold">{getChatName()}</h6>
@@ -156,19 +209,42 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
             </div>
           </div>
 
+          {/* زر التحكم بالإشعارات الصوتية */}
+          <button 
+            className="btn btn-light btn-sm me-2"
+            onClick={() => setIsSoundEnabled(!isSoundEnabled)}
+            aria-label={isSoundEnabled ? "كتم الصوت" : "تشغيل الصوت"}
+          >
+            <i className={isSoundEnabled ? "fas fa-bell" : "fas fa-bell-slash"}></i>
+          </button>
+
           <div className="dropdown">
             <button 
               className="btn btn-light btn-sm dropdown-toggle"
               type="button"
               data-bs-toggle="dropdown"
+              aria-expanded="false"
+              aria-label="خيارات المحادثة"
             >
               <i className="fas fa-ellipsis-v"></i>
             </button>
             <ul className="dropdown-menu dropdown-menu-end">
-              <li><a className="dropdown-item" href="#"><i className="fas fa-users me-2"></i>معلومات المجموعة</a></li>
-              <li><a className="dropdown-item" href="#"><i className="fas fa-bell me-2"></i>إعدادات الإشعارات</a></li>
+              <li>
+                <button className="dropdown-item">
+                  <i className="fas fa-users me-2"></i>معلومات المجموعة
+                </button>
+              </li>
+              <li>
+                <button className="dropdown-item">
+                  <i className="fas fa-bell me-2"></i>إعدادات الإشعارات
+                </button>
+              </li>
               <li><hr className="dropdown-divider" /></li>
-              <li><a className="dropdown-item text-danger" href="#"><i className="fas fa-sign-out-alt me-2"></i>مغادرة المحادثة</a></li>
+              <li>
+                <button className="dropdown-item text-danger">
+                  <i className="fas fa-sign-out-alt me-2"></i>مغادرة المحادثة
+                </button>
+              </li>
             </ul>
           </div>
         </div>
@@ -215,26 +291,27 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
                         className="rounded-circle me-2 align-self-end"
                         width="32"
                         height="32"
+                        onError={handleImageError}
                       />
                     )}
                     
-                    <div className={`message-bubble p-3 position-relative ${
-                      isMe ? 'message-sent' : 'message-received'
-                    }`}>
+                    <div className={`message-bubble p-3 position-relative rounded-3 ${
+                      isMe ? 'message-sent bg-primary text-white' : 'message-received bg-white border'
+                    }`} style={{ maxWidth: '70%' }}>
                       {chat.type === 'GROUP' && !isMe && (
-                        <div className="message-sender fw-bold mb-1">
+                        <div className="message-sender fw-bold mb-1 small">
                           {message.sender.name}
                         </div>
                       )}
                       
                       <div className="message-content">{message.content}</div>
                       
-                      <div className="message-time text-end mt-1">
-                        <small className="opacity-75">
+                      <div className={`message-time mt-1 small ${isMe ? 'text-light' : 'text-muted'}`}>
+                        <span className="opacity-75">
                           {formatTime(message.createdAt)}
-                        </small>
+                        </span>
                         {isMe && (
-                          <i className={`fas fa-check${message ? '-double text-info' : ''} ms-1`}></i>
+                          <i className={`fas fa-check${message.read ? '-double' : ''} ms-1`}></i>
                         )}
                       </div>
                     </div>
@@ -250,11 +327,11 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
       {/* منطقة إرسال الرسالة */}
       <div className="p-3 border-top bg-white">
         <div className="input-group">
-          <button className="btn btn-light border" type="button">
+          <button className="btn btn-light border" type="button" aria-label="إرفاق ملف">
             <i className="fas fa-paperclip"></i>
           </button>
           
-          <button className="btn btn-light border" type="button">
+          <button className="btn btn-light border" type="button" aria-label="إرسال صورة">
             <i className="fas fa-image"></i>
           </button>
           
@@ -264,14 +341,16 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
             placeholder="اكتب رسالتك هنا..."
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
+            onKeyPress={handleKeyPress}
             disabled={sending}
+            aria-label="نص الرسالة"
           />
           
           <button
             className="btn btn-primary px-4"
             onClick={sendMessage}
             disabled={sending || !newMessage.trim()}
+            aria-label="إرسال الرسالة"
           >
             {sending ? (
               <div className="spinner-border spinner-border-sm" role="status">
@@ -287,6 +366,19 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
           <small>اضغط Enter للإرسال</small>
         </div>
       </div>
+
+      {/* إضافة CSS للرسائل */}
+      <style jsx>{`
+        .message-bubble {
+          word-wrap: break-word;
+        }
+        .message-sent {
+          border-bottom-right-radius: 0 !important;
+        }
+        .message-received {
+          border-bottom-left-radius: 0 !important;
+        }
+      `}</style>
     </div>
   )
-}
+    }
