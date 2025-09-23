@@ -68,6 +68,7 @@ export default function ChatPage() {
     try {
       const token = localStorage.getItem('token')
       const response = await fetch('/api/auth/register', {
+        method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -78,6 +79,8 @@ export default function ChatPage() {
         // استبعاد المستخدم الحالي من القائمة
         const filteredUsers = data.filter((u: User) => u.id !== user?.id)
         setUsers(filteredUsers)
+      } else {
+        console.error('Failed to fetch users:', response.status)
       }
     } catch (error) {
       console.error('Error fetching users:', error)
@@ -111,6 +114,31 @@ export default function ChatPage() {
       }
     } catch (error) {
       console.error('Error creating chat:', error)
+    }
+  }
+
+  const startPrivateChat = async (userId: string) => {
+    try {
+      const token = localStorage.getItem('token')
+      const response = await fetch('/api/chats', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          userIds: [userId],
+          type: 'PRIVATE'
+        })
+      })
+
+      if (response.ok) {
+        const newChat = await response.json()
+        setChats(prev => [newChat, ...prev])
+        setSelectedChat(newChat)
+      }
+    } catch (error) {
+      console.error('Error starting private chat:', error)
     }
   }
 
@@ -262,7 +290,7 @@ export default function ChatPage() {
             </div>
 
             {/* قائمة المحادثات */}
-            <div className="flex-grow-1 overflow-auto px-3 py-3">
+            <div className="flex-grow-1 overflow-auto">
               {filteredChats.length === 0 ? (
                 <div className="text-center dark-text-muted p-5">
                   <div className="icon-wrapper mx-auto mb-3" style={{width: '80px', height: '80px'}}>
@@ -281,7 +309,7 @@ export default function ChatPage() {
                 filteredChats.map(chat => (
                   <div 
                     key={chat.id}
-                    className={`chat-item p-3 mb-2 rounded-3 cursor-pointer ${
+                    className={`chat-item p-3 border-bottom border-dark cursor-pointer ${
                       selectedChat?.id === chat.id ? 'active bg-primary text-white' : 'dark-surface'
                     }`}
                     onClick={() => setSelectedChat(chat)}
@@ -310,31 +338,74 @@ export default function ChatPage() {
                   </div>
                 ))
               )}
+
+              {/* عرض المستخدمين المتاحين للدردشة أسفل المحادثات */}
+              {filteredChats.length > 0 && (
+                <div className="mt-4">
+                  <div className="px-3 mb-3">
+                    <h6 className="dark-text fw-bold">المستخدمون المتاحون</h6>
+                  </div>
+                  {users.slice(0, 5).map(userItem => (
+                    <div 
+                      key={userItem.id}
+                      className="user-item p-3 border-bottom border-dark cursor-pointer dark-surface"
+                      onClick={() => startPrivateChat(userItem.id)}
+                    >
+                      <div className="d-flex align-items-center">
+                        <div className="position-relative me-3">
+                          <div 
+                            className="rounded-circle d-flex align-items-center justify-content-center text-white fw-bold"
+                            style={{
+                              width: '40px',
+                              height: '40px',
+                              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                              fontSize: '0.9rem'
+                            }}
+                          >
+                            {getUserInitials(userItem.name)}
+                          </div>
+                          <span className={`position-absolute bottom-0 start-0 user-status ${
+                            userItem.status === 'ONLINE' ? 'status-online' :
+                            userItem.status === 'AWAY' ? 'status-away' : 'status-offline'
+                          }`}></span>
+                        </div>
+                        <div className="flex-grow-1">
+                          <h6 className="mb-0 fw-bold dark-text">{userItem.name}</h6>
+                          <small className="dark-text-muted">انقر لبدء المحادثة</small>
+                        </div>
+                        <i className="fas fa-chevron-left dark-text-muted"></i>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
-            {/* تذييل الشريط الجانبي */}
-            <div className="p-3 border-top border-dark">
-              <div className="d-flex align-items-center">
-                <div className="position-relative me-3">
-                  <div 
-                    className="rounded-circle d-flex align-items-center justify-content-center text-white fw-bold"
-                    style={{
-                      width: '44px',
-                      height: '44px',
-                      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                      fontSize: '1.1rem'
-                    }}
-                  >
-                    {getUserInitials(user.name)}
+            {/* تذييل الشريط الجانبي - يظهر فقط إذا لم تكن هناك محادثات */}
+            {filteredChats.length === 0 && (
+              <div className="p-3 border-top border-dark">
+                <div className="d-flex align-items-center">
+                  <div className="position-relative me-3">
+                    <div 
+                      className="rounded-circle d-flex align-items-center justify-content-center text-white fw-bold"
+                      style={{
+                        width: '44px',
+                        height: '44px',
+                        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                        fontSize: '1.1rem'
+                      }}
+                    >
+                      {getUserInitials(user.name)}
+                    </div>
+                    <span className="position-absolute bottom-0 start-0 status-online"></span>
                   </div>
-                  <span className="position-absolute bottom-0 start-0 status-online"></span>
-                </div>
-                <div className="flex-grow-1">
-                  <h6 className="mb-0 fw-bold dark-text">{user.name}</h6>
-                  <small className="dark-text-muted">متصل الآن</small>
+                  <div className="flex-grow-1">
+                    <h6 className="mb-0 fw-bold dark-text">{user.name}</h6>
+                    <small className="dark-text-muted">متصل الآن</small>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
 
@@ -347,9 +418,13 @@ export default function ChatPage() {
               onBack={() => setSelectedChat(null)}
             />
           ) : (
-            
-              <p className="mb-0">اختر محادثة من القائمة لبدء المحادثة</p>
-              
+            <div className="d-flex flex-column justify-content-center align-items-center h-100 dark-surface">
+              <div className="text-center dark-text-muted">
+                <i className="fas fa-comments fa-4x mb-4 opacity-50"></i>
+                <h4 className="mb-3">مرحبًا بك في سوراء</h4>
+                <p className="mb-0">اختر محادثة من القائمة لبدء المحادثة</p>
+              </div>
+            </div>
           )}
         </div>
       </div>
@@ -426,106 +501,17 @@ export default function ChatPage() {
                 {/* قائمة جميع المستخدمين */}
                 <div className="mb-4">
                   <label className="form-label dark-text fw-medium mb-3">
-                    جميع المستخدمين ({filteredModalUsers.length})
+                    جميع المستخدمين ({users.length})
                   </label>
                   <div style={{maxHeight: '300px', overflowY: 'auto'}}>
-                    {filteredModalUsers.length === 0 ? (
+                    {users.length === 0 ? (
                       <div className="text-center dark-text-muted p-4">
                         <i className="fas fa-users fa-2x mb-3 opacity-50"></i>
-                        <p>لا توجد مستخدمين مطابقين للبحث</p>
+                        <p>لا توجد مستخدمين متاحين</p>
                       </div>
                     ) : (
-                      filteredModalUsers.map(userItem => (
+                      users.map(userItem => (
                         <div 
                           key={userItem.id} 
                           className={`d-flex align-items-center py-3 px-2 rounded-2 cursor-pointer ${
-                            selectedUsers.includes(userItem.id) ? 'bg-primary text-white' : 'border-bottom border-dark'
-                          }`}
-                          onClick={() => handleUserSelect(userItem.id)}
-                        >
-                          <div className="position-relative me-3">
-                            <div 
-                              className="rounded-circle d-flex align-items-center justify-content-center fw-bold"
-                              style={{
-                                width: '44px',
-                                height: '44px',
-                                background: selectedUsers.includes(userItem.id) 
-                                  ? 'rgba(255,255,255,0.2)' 
-                                  : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                                color: selectedUsers.includes(userItem.id) ? 'white' : 'white',
-                                fontSize: '1rem'
-                              }}
-                            >
-                              {getUserInitials(userItem.name)}
-                            </div>
-                            <span className={`position-absolute bottom-0 start-0 user-status ${
-                              userItem.status === 'ONLINE' ? 'status-online' :
-                              userItem.status === 'AWAY' ? 'status-away' : 'status-offline'
-                            }`}></span>
-                          </div>
-                          <div className="flex-grow-1">
-                            <div className="fw-medium">{userItem.name}</div>
-                            <small className={selectedUsers.includes(userItem.id) ? 'text-light' : 'dark-text-muted'}>
-                              {userItem.email}
-                            </small>
-                          </div>
-                          <div className="form-check">
-                            <input
-                              className="form-check-input"
-                              type="checkbox"
-                              checked={selectedUsers.includes(userItem.id)}
-                              onChange={() => handleUserSelect(userItem.id)}
-                              style={{width: '20px', height: '20px'}}
-                            />
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-                
-                {/* حقل اسم المجموعة */}
-                {selectedUsers.length > 1 && (
-                  <div className="mb-4">
-                    <label className="form-label dark-text fw-medium mb-2">اسم المجموعة</label>
-                    <input 
-                      type="text" 
-                      className="form-control dark-surface border-dark dark-text rounded-2 p-3"
-                      placeholder="أدخل اسمًا للمجموعة..."
-                      value={groupName}
-                      onChange={(e) => setGroupName(e.target.value)}
-                    />
-                  </div>
-                )}
-              </div>
-              
-              <div className="modal-footer border-dark p-4">
-                <button 
-                  type="button" 
-                  className="btn btn-outline-secondary rounded-2 px-4"
-                  onClick={() => {
-                    setShowNewChatModal(false)
-                    setSelectedUsers([])
-                    setGroupName('')
-                    setModalSearchTerm('')
-                  }}
-                >
-                  إلغاء
-                </button>
-                <button 
-                  type="button" 
-                  className="btn btn-primary rounded-2 px-4"
-                  onClick={() => createNewChat(selectedUsers, groupName)}
-                  disabled={selectedUsers.length === 0 || (selectedUsers.length > 1 && !groupName.trim())}
-                >
-                  <i className="fas fa-plus me-2"></i>
-                  إنشاء محادثة
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
+                            selectedUsers
