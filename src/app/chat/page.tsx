@@ -67,7 +67,7 @@ export default function ChatPage() {
   const fetchUsers = async () => {
     try {
       const token = localStorage.getItem('token')
-      const response = await fetch('/api/users', {
+      const response = await fetch('/api/auth/register', {
         headers: {
           'Authorization': `Bearer ${token}`
         }
