@@ -306,78 +306,78 @@ export default function ChatPage() {
                   </button>
                 </div>
               ) : (
-                filteredChats.map(chat => (
-                  <div 
-                    key={chat.id}
-                    className={`chat-item p-3 border-bottom border-dark cursor-pointer ${
-                      selectedChat?.id === chat.id ? 'active bg-primary text-white' : 'dark-surface'
-                    }`}
-                    onClick={() => setSelectedChat(chat)}
-                  >
-                    <div className="d-flex align-items-center">
-                      <div className={`icon-wrapper me-3 ${selectedChat?.id === chat.id ? 'text-white' : 'text-primary'}`} style={{width: '48px', height: '48px'}}>
-                        <i className={getChatIcon(chat)}></i>
-                      </div>
-                      <div className="flex-grow-1 min-w-0">
-                        <div className="d-flex justify-content-between align-items-center mb-1">
-                          <h6 className="mb-0 fw-bold truncate">{getChatDisplayName(chat)}</h6>
-                          <small className={selectedChat?.id === chat.id ? 'text-light' : 'dark-text-muted'}>
-                            {formatTime(chat.updatedAt)}
-                          </small>
-                        </div>
-                        <p className={`mb-0 truncate small ${selectedChat?.id === chat.id ? 'text-light' : 'dark-text-muted'}`}>
-                          {getLastMessage(chat)}
-                        </p>
-                      </div>
-                      {getUnreadCount(chat) > 0 && (
-                        <span className="badge bg-danger rounded-pill ms-2">
-                          {getUnreadCount(chat)}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                ))
-              )}
-
-              {/* عرض المستخدمين المتاحين للدردشة أسفل المحادثات */}
-              {filteredChats.length > 0 && (
-                <div className="mt-4">
-                  <div className="px-3 mb-3">
-                    <h6 className="dark-text fw-bold">المستخدمون المتاحون</h6>
-                  </div>
-                  {users.slice(0, 5).map(userItem => (
+                <>
+                  {filteredChats.map(chat => (
                     <div 
-                      key={userItem.id}
-                      className="user-item p-3 border-bottom border-dark cursor-pointer dark-surface"
-                      onClick={() => startPrivateChat(userItem.id)}
+                      key={chat.id}
+                      className={`chat-item p-3 border-bottom border-dark cursor-pointer ${
+                        selectedChat?.id === chat.id ? 'active bg-primary text-white' : 'dark-surface'
+                      }`}
+                      onClick={() => setSelectedChat(chat)}
                     >
                       <div className="d-flex align-items-center">
-                        <div className="position-relative me-3">
-                          <div 
-                            className="rounded-circle d-flex align-items-center justify-content-center text-white fw-bold"
-                            style={{
-                              width: '40px',
-                              height: '40px',
-                              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                              fontSize: '0.9rem'
-                            }}
-                          >
-                            {getUserInitials(userItem.name)}
+                        <div className={`icon-wrapper me-3 ${selectedChat?.id === chat.id ? 'text-white' : 'text-primary'}`} style={{width: '48px', height: '48px'}}>
+                          <i className={getChatIcon(chat)}></i>
+                        </div>
+                        <div className="flex-grow-1 min-w-0">
+                          <div className="d-flex justify-content-between align-items-center mb-1">
+                            <h6 className="mb-0 fw-bold truncate">{getChatDisplayName(chat)}</h6>
+                            <small className={selectedChat?.id === chat.id ? 'text-light' : 'dark-text-muted'}>
+                              {formatTime(chat.updatedAt)}
+                            </small>
                           </div>
-                          <span className={`position-absolute bottom-0 start-0 user-status ${
-                            userItem.status === 'ONLINE' ? 'status-online' :
-                            userItem.status === 'AWAY' ? 'status-away' : 'status-offline'
-                          }`}></span>
+                          <p className={`mb-0 truncate small ${selectedChat?.id === chat.id ? 'text-light' : 'dark-text-muted'}`}>
+                            {getLastMessage(chat)}
+                          </p>
                         </div>
-                        <div className="flex-grow-1">
-                          <h6 className="mb-0 fw-bold dark-text">{userItem.name}</h6>
-                          <small className="dark-text-muted">انقر لبدء المحادثة</small>
-                        </div>
-                        <i className="fas fa-chevron-left dark-text-muted"></i>
+                        {getUnreadCount(chat) > 0 && (
+                          <span className="badge bg-danger rounded-pill ms-2">
+                            {getUnreadCount(chat)}
+                          </span>
+                        )}
                       </div>
                     </div>
                   ))}
-                </div>
+                  
+                  {/* عرض المستخدمين المتاحين للدردشة أسفل المحادثات */}
+                  <div className="mt-4">
+                    <div className="px-3 mb-3">
+                      <h6 className="dark-text fw-bold">المستخدمون المتاحون</h6>
+                    </div>
+                    {users.slice(0, 5).map(userItem => (
+                      <div 
+                        key={userItem.id}
+                        className="user-item p-3 border-bottom border-dark cursor-pointer dark-surface"
+                        onClick={() => startPrivateChat(userItem.id)}
+                      >
+                        <div className="d-flex align-items-center">
+                          <div className="position-relative me-3">
+                            <div 
+                              className="rounded-circle d-flex align-items-center justify-content-center text-white fw-bold"
+                              style={{
+                                width: '40px',
+                                height: '40px',
+                                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                                fontSize: '0.9rem'
+                              }}
+                            >
+                              {getUserInitials(userItem.name)}
+                            </div>
+                            <span className={`position-absolute bottom-0 start-0 user-status ${
+                              userItem.status === 'ONLINE' ? 'status-online' :
+                              userItem.status === 'AWAY' ? 'status-away' : 'status-offline'
+                            }`}></span>
+                          </div>
+                          <div className="flex-grow-1">
+                            <h6 className="mb-0 fw-bold dark-text">{userItem.name}</h6>
+                            <small className="dark-text-muted">انقر لبدء المحادثة</small>
+                          </div>
+                          <i className="fas fa-chevron-left dark-text-muted"></i>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
               )}
             </div>
 
@@ -514,4 +514,93 @@ export default function ChatPage() {
                         <div 
                           key={userItem.id} 
                           className={`d-flex align-items-center py-3 px-2 rounded-2 cursor-pointer ${
-                            selectedUsers
+                            selectedUsers.includes(userItem.id) ? 'bg-primary text-white' : 'border-bottom border-dark'
+                          }`}
+                          onClick={() => handleUserSelect(userItem.id)}
+                        >
+                          <div className="position-relative me-3">
+                            <div 
+                              className="rounded-circle d-flex align-items-center justify-content-center fw-bold"
+                              style={{
+                                width: '44px',
+                                height: '44px',
+                                background: selectedUsers.includes(userItem.id) 
+                                  ? 'rgba(255,255,255,0.2)' 
+                                  : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                                color: selectedUsers.includes(userItem.id) ? 'white' : 'white',
+                                fontSize: '1rem'
+                              }}
+                            >
+                              {getUserInitials(userItem.name)}
+                            </div>
+                            <span className={`position-absolute bottom-0 start-0 user-status ${
+                              userItem.status === 'ONLINE' ? 'status-online' :
+                              userItem.status === 'AWAY' ? 'status-away' : 'status-offline'
+                            }`}></span>
+                          </div>
+                          <div className="flex-grow-1">
+                            <div className="fw-medium">{userItem.name}</div>
+                            <small className={selectedUsers.includes(userItem.id) ? 'text-light' : 'dark-text-muted'}>
+                              {userItem.email}
+                            </small>
+                          </div>
+                          <div className="form-check">
+                            <input
+                              className="form-check-input"
+                              type="checkbox"
+                              checked={selectedUsers.includes(userItem.id)}
+                              onChange={() => handleUserSelect(userItem.id)}
+                              style={{width: '20px', height: '20px'}}
+                            />
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+                
+                {/* حقل اسم المجموعة */}
+                {selectedUsers.length > 1 && (
+                  <div className="mb-4">
+                    <label className="form-label dark-text fw-medium mb-2">اسم المجموعة</label>
+                    <input 
+                      type="text" 
+                      className="form-control dark-surface border-dark dark-text rounded-2 p-3"
+                      placeholder="أدخل اسمًا للمجموعة..."
+                      value={groupName}
+                      onChange={(e) => setGroupName(e.target.value)}
+                    />
+                  </div>
+                )}
+              </div>
+              
+              <div className="modal-footer border-dark p-4">
+                <button 
+                  type="button" 
+                  className="btn btn-outline-secondary rounded-2 px-4"
+                  onClick={() => {
+                    setShowNewChatModal(false)
+                    setSelectedUsers([])
+                    setGroupName('')
+                    setModalSearchTerm('')
+                  }}
+                >
+                  إلغاء
+                </button>
+                <button 
+                  type="button" 
+                  className="btn btn-primary rounded-2 px-4"
+                  onClick={() => createNewChat(selectedUsers, groupName)}
+                  disabled={selectedUsers.length === 0 || (selectedUsers.length > 1 && !groupName.trim())}
+                >
+                  <i className="fas fa-plus me-2"></i>
+                  إنشاء محادثة
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
