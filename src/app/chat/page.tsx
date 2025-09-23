@@ -347,16 +347,12 @@ export default function ChatPage() {
               onBack={() => setSelectedChat(null)}
             />
           ) : (
-            <div className="d-flex flex-column justify-content-center align-items-center h-100 dark-surface">
-              <div className="text-center dark-text-muted">
-                <i className="fas fa-comments fa-4x mb-4 opacity-50"></i>
-                <h4 className="mb-3">مرحبًا بك في سوراء</h4>
-                <p className="mb-0">اختر محادثة من القائمة لبدء المحادثة</p>
-              </div>
-            </div>
+            
+              <p className="mb-0">اختر محادثة من القائمة لبدء المحادثة</p>
+              
           )}
         </div>
-      </div>
+      
 
       {/* Modal إنشاء محادثة جديدة */}
       {showNewChatModal && (
