@@ -14,7 +14,7 @@ export default function Login() {
 
   useEffect(() => {
     if (user) {
-      router.push('/')
+      router.push('/chat')
     }
   }, [user, router])
 
@@ -26,7 +26,7 @@ export default function Login() {
     const success = await login(email, password)
     
     if (success) {
-      router.push('/')
+      router.push('/chat')
     } else {
       setError('البريد الإلكتروني أو كلمة المرور غير صحيحة')
     }

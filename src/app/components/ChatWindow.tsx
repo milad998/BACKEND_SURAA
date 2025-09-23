@@ -133,6 +133,7 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
         setMessages(prev => [...prev, message])
         setNewMessage('')
       }
+      
     } catch (error) {
       console.error('Error sending message:', error)
     } finally {
@@ -191,14 +192,7 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
           </button>
           
           <div className="flex-grow-1 d-flex align-items-center">
-            <img 
-              src={getChatAvatar()} 
-              alt={getChatName()}
-              className="rounded-circle me-3"
-              width="40"
-              height="40"
-              onError={handleImageError}
-            />
+            
             <div>
               <h6 className="mb-0 fw-bold">{getChatName()}</h6>
               <small className="text-muted">
