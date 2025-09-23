@@ -18,6 +18,7 @@ interface Message {
   type: string
   encrypted: boolean
   createdAt: string
+  read?: boolean // أضفنا هذه الخاصية
   sender: User
 }
 
@@ -45,7 +46,7 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
 
   // تحميل الصوت عند بدء التشغيل
   useEffect(() => {
-    audioRef.current = new Audio('/notification.mp3')
+    audioRef.current = new Audio('/sounds/notification.mp3')
     audioRef.current.preload = 'auto'
     
     return () => {
@@ -311,7 +312,7 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
                           {formatTime(message.createdAt)}
                         </span>
                         {isMe && (
-                          <i className={`fas fa-check${message.read ? '-double' : ''} ms-1`}></i>
+                          <i className="fas fa-check ms-1"></i> {/* تم إصلاح هذا السطر */}
                         )}
                       </div>
                     </div>
@@ -366,19 +367,6 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
           <small>اضغط Enter للإرسال</small>
         </div>
       </div>
-
-      {/* إضافة CSS للرسائل */}
-      <style jsx>{`
-        .message-bubble {
-          word-wrap: break-word;
-        }
-        .message-sent {
-          border-bottom-right-radius: 0 !important;
-        }
-        .message-received {
-          border-bottom-left-radius: 0 !important;
-        }
-      `}</style>
     </div>
   )
-    }
+}
