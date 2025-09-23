@@ -1,7 +1,7 @@
 'use client'
 import { useAuth } from '@/context/AuthContext'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import ChatWindow from './components/ChatWindow'
 
 interface User {
@@ -22,7 +22,7 @@ interface Chat {
   unreadCount?: number
 }
 
-export default function Home() {
+function HomeContent() {
   const { user, loading } = useAuth()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -40,12 +40,11 @@ export default function Home() {
 
     if (user) {
       fetchChats()
-      
+
       if (chatId) {
         fetchChat(chatId)
       } else {
         setCurrentChat(null)
-        // إذا لم يكن هناك chatId، نتحقق من localStorage
         const savedChatId = localStorage.getItem('currentChatId')
         if (savedChatId) {
           fetchChat(savedChatId)
@@ -62,12 +61,11 @@ export default function Home() {
           'Authorization': `Bearer ${token}`
         }
       })
-      
+
       if (response.ok) {
         const data = await response.json()
         setChats(data)
-        
-        // إذا كان هناك chatId في URL، نبحث عنه في القائمة المحملة
+
         if (chatId) {
           const foundChat = data.find((chat: Chat) => chat.id === chatId)
           if (foundChat && !currentChat) {
@@ -89,13 +87,12 @@ export default function Home() {
           'Authorization': `Bearer ${token}`
         }
       })
-      
+
       if (response.ok) {
         const chat = await response.json()
         setCurrentChat(chat)
         localStorage.setItem('currentChatId', id)
       } else {
-        // البحث في قائمة المحادثات المحملة
         const foundChat = chats.find(chat => chat.id === id)
         if (foundChat) {
           setCurrentChat(foundChat)
@@ -107,7 +104,6 @@ export default function Home() {
       }
     } catch (error) {
       console.error('Error fetching chat:', error)
-      // البحث في قائمة المحادثات المحملة كبديل
       const foundChat = chats.find(chat => chat.id === id)
       if (foundChat) {
         setCurrentChat(foundChat)
@@ -122,7 +118,6 @@ export default function Home() {
   }
 
   const handleBack = () => {
-    // العودة إلى الصفحة الرئيسية بدون chatId
     router.push('/')
     localStorage.removeItem('currentChatId')
   }
@@ -146,7 +141,6 @@ export default function Home() {
 
   if (!user) return null
 
-  // إذا كان هناك chatId ولكن المحادثة لم تحمل بعد
   if (chatId && chatLoading) {
     return (
       <div className="d-flex justify-content-center align-items-center vh-100 dark-theme">
@@ -160,7 +154,6 @@ export default function Home() {
     )
   }
 
-  // إذا كان هناك chatId ولكن لم يتم العثور على المحادثة
   if (chatId && !currentChat) {
     return (
       <div className="d-flex flex-column justify-content-center align-items-center vh-100 dark-surface">
@@ -189,12 +182,10 @@ export default function Home() {
     )
   }
 
-  // إذا كانت هناك محادثة حالية، عرض نافذة المحادثة
   if (currentChat) {
     return (
       <div className="container-fluid vh-100 dark-theme">
         <div className="row h-100">
-          {/* زر العودة للشاشات الصغيرة */}
           <div className="col-12 d-md-none p-3 border-bottom border-dark bg-dark">
             <button 
               className="btn btn-light btn-sm"
@@ -205,8 +196,6 @@ export default function Home() {
               العودة
             </button>
           </div>
-          
-          {/* نافذة المحادثة */}
           <div className="col-12 p-0">
             <ChatWindow 
               chat={currentChat}
@@ -219,4 +208,22 @@ export default function Home() {
     )
   }
 
+  return null
 }
+
+export default function Home() {
+  return (
+    <Suspense fallback={
+      <div className="d-flex justify-content-center align-items-center vh-100 dark-theme">
+        <div className="text-center">
+          <div className="spinner-border text-primary mb-3" style={{width: '3rem', height: '3rem'}} role="status">
+            <span className="visually-hidden">جاري التحميل...</span>
+          </div>
+          <p className="dark-text-muted">جاري تحميل الصفحة...</p>
+        </div>
+      </div>
+    }>
+      <HomeContent />
+    </Suspense>
+  )
+    }
