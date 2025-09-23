@@ -361,10 +361,7 @@ export default function ChatPage() {
                 >
                   {getUserInitials(user.name)}
                 </div>
-                <div className="flex-grow-1">
-                  <h6 className="mb-0 fw-bold dark-text">{user.name}</h6>
-                  <small className="dark-text-muted">متصل الآن</small>
-                </div>
+                
                 <div className="dropdown">
                   <button 
                     className="btn btn-link dark-text dropdown-toggle p-0"
