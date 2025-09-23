@@ -352,7 +352,7 @@ export default function ChatPage() {
               
           )}
         </div>
-      
+      </div>
 
       {/* Modal إنشاء محادثة جديدة */}
       {showNewChatModal && (
