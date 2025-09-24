@@ -284,7 +284,6 @@ export default function ChatPage() {
                   <span className={`badge ${currentUserStatus === 'ONLINE' ? 'bg-success' : currentUserStatus === 'AWAY' ? 'bg-warning' : 'bg-secondary'} me-2`}>
                     {currentUserStatus === 'ONLINE' ? '🟢 متصل' : currentUserStatus === 'AWAY' ? '🟡 بعيد' : '⚫ غير متصل'}
                   </span>
-                  <small className="dark-text-muted">({onlineUsers.size} مستخدمون متصلون)</small>
                 </div>
               </div>
               
@@ -305,7 +304,7 @@ export default function ChatPage() {
                   onClick={handleLogout}
                 >
                   <i className="fas fa-sign-out-alt me-2"></i>
-                  تسجيل الخروج
+                
                 </button>
               </div>
             </div>

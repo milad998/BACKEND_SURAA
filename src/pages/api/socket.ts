@@ -1,15 +1,15 @@
-// src/pages/api/socket.ts (إذا كنت تستخدم Pages Router)
-// أو src/app/api/socket/route.ts (إذا كنت تستخدم App Router)
-
+// src/pages/api/socket.ts
 import { NextApiRequest, NextApiResponse } from 'next'
 import { Server as SocketIOServer } from 'socket.io'
 
 export default function handler(req: NextApiRequest, res: any) {
-  // إذا كان السوكيت يعمل بالفعل
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' })
+  }
+
   if (res.socket.server.io) {
     console.log('Socket is already running')
-    res.status(200).json({ message: 'Socket is already running' })
-    return
+    return res.status(200).json({ message: 'Socket is already running' })
   }
 
   console.log('Initializing Socket.io server...')
@@ -26,10 +26,7 @@ export default function handler(req: NextApiRequest, res: any) {
       socket.on('join-room', (userId: string) => {
         console.log(`🎯 User ${userId} joined room`)
         socket.join(userId)
-        // إرسال حدث للمستخدمين الآخرين
         socket.broadcast.emit('user-online', userId)
-        
-        // تأكيد للمستخدم الحالي
         socket.emit('joined-room', { userId, success: true })
       })
 
@@ -42,7 +39,6 @@ export default function handler(req: NextApiRequest, res: any) {
         console.log('❌ User disconnected:', socket.id)
       })
 
-      // حدث لاختبار الاتصال
       socket.on('ping', () => {
         socket.emit('pong', { message: 'Server is alive!', timestamp: Date.now() })
       })
@@ -50,10 +46,10 @@ export default function handler(req: NextApiRequest, res: any) {
 
     res.socket.server.io = io
     console.log('🚀 Socket.io server initialized successfully')
-    res.status(200).json({ message: 'Socket started successfully' })
+    return res.status(200).json({ message: 'Socket started successfully' })
 
   } catch (error) {
     console.error('❌ Socket initialization error:', error)
-    res.status(500).json({ error: 'Socket initialization failed' })
+    return res.status(500).json({ error: 'Socket initialization failed' })
   }
 }
