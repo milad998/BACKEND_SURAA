@@ -89,3 +89,12 @@ export interface SocketEvents {
     status: User['status']
   }) => void
 }
+// أضف هذا إلى ملف types/index.ts
+export interface ChatUser {
+  id: string
+  name: string
+  email: string
+  status: 'ONLINE' | 'OFFLINE' | 'AWAY'
+  lastSeen?: string
+  avatar?: string
+}

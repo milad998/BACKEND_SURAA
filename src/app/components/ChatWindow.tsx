@@ -57,7 +57,7 @@ const MessageItem = memo(({
   return (
     <div>
       {showDate && (
-        <div className="text-center my-3">
+        <div className="text-center my-3 ">
           <span className="badge bg-secondary px-3 py-2">
             {new Date(message.createdAt).toLocaleDateString('ar-EG', {
               weekday: 'long',
@@ -81,9 +81,9 @@ const MessageItem = memo(({
           />
         )}
         
-        <div className={`message-bubble p-3 position-relative rounded-3 ${
+        <div className={`message-bubble p-2 rounded-5 d-flex flex-row gap-2 ${
           isMe ? 'message-sent bg-primary text-white' : 'message-received bg-white border'
-        }`} style={{ maxWidth: '70%' }}>
+        }`} style={{ maxWidth: '70%',fontSize:14}}>
           {chatType === 'GROUP' && !isMe && (
             <div className="message-sender fw-bold mb-1 small">
               {message.sender.name}
@@ -93,7 +93,7 @@ const MessageItem = memo(({
           <div className="message-content">{message.content}</div>
           
           <div className={`message-time mt-1 small ${isMe ? 'text-light' : 'text-muted'}`}>
-            <span className="opacity-75">
+            <span className="opacity-75 " style={{fontSize:10}}>
               {formatTime(message.createdAt)}
             </span>
             {isMe && (
@@ -313,7 +313,7 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
   return (
     <div className="d-flex flex-column h-100 bg-light">
       {/* الهيدر الثابت في الأعلى */}
-      <div className="p-3 border-bottom bg-white shadow-sm" style={{flexShrink: 0}}>
+      <div className="fixed-top p-3 border-bottom bg-white shadow-sm" style={{flexShrink: 0}}>
         <div className="d-flex align-items-center">
           <button 
             className="btn btn-light btn-sm me-3 d-md-none"
@@ -372,12 +372,12 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
       {/* منطقة الرسائل - قابلة للتمرير */}
       <div 
         ref={messagesContainerRef}
-        className="flex-grow-1 p-3 overflow-auto"
-        style={{minHeight: 0}}
+        className="flex-grow-1  overflow-auto"
+        style={{minHeight: 0,marginBottom:100,marginTop:30 }}
       >
         <div className="d-flex flex-column">
           {messages.length === 0 ? (
-            <div className="text-center text-muted my-5">
+            <div className="text-center text-muted my-5 mb-5">
               <i className="fas fa-comments fa-3x mb-3 opacity-50"></i>
               <p>لا توجد رسائل بعد. ابدأ المحادثة الآن!</p>
             </div>
@@ -403,11 +403,21 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
             })
           )}
           <div ref={messagesEndRef} />
+          <button
+  className="btn btn-primary mb-5"
+  style={{
+    position: 'fixed',
+    bottom: '80px',  // المسافة من الأسفل (تعدل حسب ارتفاع الفوتر)
+    left: '4%',
+    transform: 'translateX(-50%)'
+  }}
+  onClick={()=> scrollToBottom}
+ >^</button>
         </div>
       </div>
 
       {/* الفوتر الثابت في الأسفل */}
-      <div className="p-3 border-top bg-white" style={{flexShrink: 0}}>
+      <div className="fixed-bottom p-3 border-top bg-white " style={{marginTop:"40px"}} >
         <div className="input-group">
           <button className="btn btn-light border" type="button" aria-label="إرفاق ملف">
             <i className="fas fa-paperclip"></i>
