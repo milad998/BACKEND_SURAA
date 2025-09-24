@@ -164,15 +164,15 @@ export default function ChatPage() {
 
       if (response.ok) {
         const newChat = await response.json()
-        router.push(`/?chatid=${newChat.id}`)
+        router.push(`/?chatId=${newChat.id}`)
       } else {
         // إذا فشل إنشاء المحادثة، انتقل إلى صفحة محادثة افتراضية
-        router.push(`/?chatid=${receiverId}`)
+        router.push(`/?chatId=${receiverId}`)
       }
     } catch (error) {
       console.error('Error starting private chat:', error)
       // في حالة الخطأ، انتقل إلى صفحة محادثة افتراضية
-      router.push(`/?chatid=${receiverId}`)
+      router.push(`/?chatId=${receiverId}`)
     }
   }
 
@@ -267,9 +267,9 @@ export default function ChatPage() {
                   value={currentUserStatus}
                   style={{width: 'auto'}}
                 >
-                  <option value="ONLINE">🟢 متصل</option>
-                  <option value="AWAY">🟡 بعيد</option>
-                  <option value="OFFLINE">⚫ غير متصل</option>
+                  <option value="ONLINE">🟢 </option>
+                  <option value="AWAY">🟡 </option>
+                  <option value="OFFLINE">⚫  </option>
                 </select>
                 
                 <button 
