@@ -21,6 +21,7 @@ export default function ChatPage() {
   const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set())
   const [currentUserStatus, setCurrentUserStatus] = useState<'ONLINE' | 'OFFLINE' | 'AWAY'>('ONLINE')
   const socketRef = useRef<any>(null)
+  
 
   useEffect(() => {
     if (!loading && !authUser) {

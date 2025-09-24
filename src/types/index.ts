@@ -1,100 +1,51 @@
-// src/types/index.ts
-import { Server as NetServer, Socket } from 'net'
-import { NextApiResponse } from 'next'
+// src/pages/api/socket.ts
+import { NextApiRequest, NextApiResponse } from 'next'
 import { Server as SocketIOServer } from 'socket.io'
 
-export type NextApiResponseServerIO = NextApiResponse & {
-  socket: Socket & {
-    server: NetServer & {
-      io: SocketIOServer
-    }
+export default function SocketHandler(
+  req: NextApiRequest,
+  res: any // استخدام any لتجنب مشاكل الأنواع
+) {
+  if (req.method !== 'GET') {
+    res.status(405).json({ error: 'Method not allowed' })
+    return
   }
-}
 
-export interface User {
-  id: string
-  email: string
-  name: string
-  avatar?: string
-  status: 'ONLINE' | 'OFFLINE' | 'AWAY'
-  lastSeen?: Date
-  createdAt: Date
-  updatedAt: Date
-}
+  if (res.socket.server.io) {
+    res.status(200).json({ message: 'Socket is already running' })
+    return
+  }
 
-export interface Chat {
-  id: string
-  name?: string
-  type: 'PRIVATE' | 'GROUP'
-  background?: string
-  createdAt: Date
-  updatedAt: Date
-  users: ChatUser[]
-  messages: Message[]
-}
+  console.log('Initializing Socket.io server...')
 
-export interface ChatUser {
-  id: string
-  userId: string
-  chatId: string
-  joinedAt: Date
-  user: User
-}
+  try {
+    const io = new SocketIOServer(res.socket.server, {
+      path: '/api/socket/io',
+      addTrailingSlash: false,
+    })
 
-export interface Message {
-  id: string
-  content: string
-  type: 'TEXT' | 'IMAGE' | 'VIDEO' | 'AUDIO' | 'VOICE'
-  encrypted: boolean
-  isRead: boolean
-  senderId: string
-  receiverId?: string
-  chatId: string
-  createdAt: Date
-  updatedAt: Date
-  sender: User
-  receiver?: User
-}
+    io.on('connection', (socket) => {
+      console.log('User connected:', socket.id)
 
-export interface SocketEvents {
-  // الأحداث المرسلة من العميل إلى الخادم
-  'join-room': (userId: string) => void
-  'send-message': (data: {
-    content: string
-    chatId: string
-    type: Message['type']
-    receiverId?: string
-    encrypted?: boolean
-  }) => void
-  'mark-as-read': (data: {
-    messageIds: string[]
-    chatId: string
-    readerId: string
-  }) => void
-  'user-status': (data: {
-    userId: string
-    status: User['status']
-  }) => void
+      socket.on('join-room', (userId: string) => {
+        socket.join(userId)
+        socket.broadcast.emit('user-online', userId)
+      })
 
-  // الأحداث المرسلة من الخادم إلى العميل
-  'receive-message': (message: Message) => void
-  'messages-read': (data: {
-    chatId: string
-    readerId: string
-  }) => void
-  'user-online': (userId: string) => void
-  'user-offline': (userId: string) => void
-  'status-changed': (data: {
-    userId: string
-    status: User['status']
-  }) => void
-}
-// أضف هذا إلى ملف types/index.ts
-export interface ChatUser {
-  id: string
-  name: string
-  email: string
-  status: 'ONLINE' | 'OFFLINE' | 'AWAY'
-  lastSeen?: string
-  avatar?: string
+      socket.on('user-status', (data: { userId: string; status: string }) => {
+        socket.broadcast.emit('status-changed', data)
+      })
+
+      socket.on('disconnect', () => {
+        console.log('User disconnected:', socket.id)
+      })
+    })
+
+    res.socket.server.io = io
+    res.status(200).json({ message: 'Socket started successfully' })
+    
+  } catch (error) {
+    console.error('Socket error:', error)
+    res.status(500).json({ error: 'Socket initialization failed' })
+  }
 }
