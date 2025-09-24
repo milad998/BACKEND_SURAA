@@ -206,7 +206,7 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { messageId, content, encrypted = true } = await request.json()
+    const { messageId } = await request.json()
 
     if (!messageId) {
       return NextResponse.json(
@@ -215,11 +215,10 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    // البحث عن الرسالة والتحقق من الملكية
+    // البحث عن الرسالة والتحقق من أن المستخدم عضو في المحادثة
     const existingMessage = await prisma.message.findFirst({
       where: {
-        id: messageId,
-        senderId: user.id // فقط المرسل يمكنه تعديل الرسالة
+        id: messageId
       },
       include: {
         chat: {
@@ -236,39 +235,24 @@ export async function PUT(request: NextRequest) {
 
     if (!existingMessage) {
       return NextResponse.json(
-        { error: 'Message not found or access denied' },
+        { error: 'Message not found' },
         { status: 404 }
       )
     }
 
-    // التحقق من أن المستخدم لا يزال عضوًا في المحادثة
+    // التحقق من أن المستخدم عضو في المحادثة
     if (existingMessage.chat.users.length === 0) {
       return NextResponse.json(
-        { error: 'You are no longer a member of this chat' },
+        { error: 'You are not a member of this chat' },
         { status: 403 }
       )
     }
 
-    let shouldEncrypt = encrypted
-    let finalContent = content || existingMessage.content
-
-    if (content && shouldEncrypt) {
-      try {
-        const encryptedData = encrypt(content)
-        finalContent = JSON.stringify(encryptedData)
-      } catch (error) {
-        console.error('Encryption failed, sending as plain text:', error)
-        shouldEncrypt = false
-        finalContent = content
-      }
-    }
-
-    // تحديث الرسالة
+    // تحديث الرسالة لجعل isRead = true
     const updatedMessage = await prisma.message.update({
       where: { id: messageId },
       data: {
-        content: finalContent,
-        encrypted: content ? shouldEncrypt : existingMessage.encrypted,
+        isRead: true,
         updatedAt: new Date()
       },
       include: {
@@ -282,12 +266,6 @@ export async function PUT(request: NextRequest) {
       }
     })
 
-    // تحديث وقت آخر تعديل للمحادثة
-    await prisma.chat.update({
-      where: { id: existingMessage.chatId },
-      data: { updatedAt: new Date() }
-    })
-
     // فك تشفير المحتوى للعرض
     const decryptedContent = updatedMessage.encrypted ? 
       decrypt(JSON.parse(updatedMessage.content)) : updatedMessage.content
@@ -299,13 +277,13 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json(responseMessage)
   } catch (error) {
-    console.error('Error updating message:', error)
+    console.error('Error updating message read status:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
     )
   }
-}
+      }
 
 export async function DELETE(request: NextRequest) {
   try {
