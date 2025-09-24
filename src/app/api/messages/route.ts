@@ -283,7 +283,7 @@ export async function PUT(request: NextRequest) {
       { status: 500 }
     )
   }
-      }
+}
 
 export async function DELETE(request: NextRequest) {
   try {
@@ -310,7 +310,7 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
-    // البحث عن الرسالة والتحقق من الملكية أو صلاحيات المشرف
+    // البحث عن الرسالة والتحقق من الملكية
     const existingMessage = await prisma.message.findFirst({
       where: {
         id: messageId
@@ -321,9 +321,6 @@ export async function DELETE(request: NextRequest) {
             users: {
               where: {
                 userId: user.id
-              },
-              include: {
-                user: true
               }
             }
           }
@@ -347,12 +344,10 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
-    // التحقق من الصلاحيات: إما المرسل أو مشرف في المجموعة
+    // التحقق من الصلاحيات: فقط المرسل يمكنه حذف الرسالة
     const isSender = existingMessage.senderId === user.id
-    const isAdmin = existingMessage.chat.type === 'GROUP' && 
-      existingMessage.chat.users[0]?.user.role === 'ADMIN'
 
-    if (!isSender && !isAdmin) {
+    if (!isSender) {
       return NextResponse.json(
         { error: 'You do not have permission to delete this message' },
         { status: 403 }
