@@ -57,7 +57,19 @@ const requestNotificationPermission = async (): Promise<boolean> => {
 // عرض إشعار للمستخدم
 const showNotification = (title: string, options: NotificationOptions) => {
   if ('Notification' in window && Notification.permission === 'granted') {
-    new Notification(title, options)
+    // إغلاق أي إشعارات سابقة بنفس الـ tag لمنع التكرار
+    if (options.tag) {
+      // لا يمكن إغلاق الإشعارات مباشرة، لكن يمكن استخدام service worker للتحكم بها
+    }
+    
+    // استخدام service worker إذا كان متاحًا للإشعارات الأكثر تقدمًا
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.ready.then(registration => {
+        registration.showNotification(title, options)
+      })
+    } else {
+      new Notification(title, options)
+    }
   }
 }
 
@@ -149,6 +161,8 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
   const [notificationsEnabled, setNotificationsEnabled] = useState(false)
   const [lastMessageCount, setLastMessageCount] = useState(0)
   const [isWindowFocused, setIsWindowFocused] = useState(true)
+  const [lastNotificationTime, setLastNotificationTime] = useState<number>(0)
+  const notificationCooldown = 3000 // 3 ثواني بين الإشعارات
 
   // طلب إذن الإشعارات عند تحميل المكون
   useEffect(() => {
@@ -162,7 +176,12 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
 
   // تتبع حالة تركيز النافذة
   useEffect(() => {
-    const handleFocus = () => setIsWindowFocused(true)
+    const handleFocus = () => {
+      setIsWindowFocused(true)
+      // عند العودة للنافذة، تحديث عدد الرسائل المعروفة
+      setLastMessageCount(messages.length)
+    }
+    
     const handleBlur = () => setIsWindowFocused(false)
 
     window.addEventListener('focus', handleFocus)
@@ -172,23 +191,28 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
       window.removeEventListener('focus', handleFocus)
       window.removeEventListener('blur', handleBlur)
     }
-  }, [])
+  }, [messages.length])
 
   // التحقق من الرسائل الجديدة وعرض الإشعارات
   useEffect(() => {
-    if (messages.length > lastMessageCount && !isWindowFocused) {
+    if (messages.length > lastMessageCount && !isWindowFocused && notificationsEnabled) {
       const newMessages = messages.slice(lastMessageCount)
+      const now = Date.now()
       
-      newMessages.forEach(message => {
-        // عرض إشعار فقط للرسائل من الآخرين
-        if (message.senderId !== currentUser.id) {
-          showNewMessageNotification(message, chat)
-        }
-      })
+      // عرض إشعار فقط إذا مر وقت كافٍ منذ آخر إشعار
+      if (now - lastNotificationTime > notificationCooldown) {
+        newMessages.forEach(message => {
+          // عرض إشعار فقط للرسائل من الآخرين
+          if (message.senderId !== currentUser.id) {
+            showNewMessageNotification(message, chat)
+          }
+        })
+        setLastNotificationTime(now)
+      }
     }
     
     setLastMessageCount(messages.length)
-  }, [messages, lastMessageCount, isWindowFocused, currentUser.id, chat])
+  }, [messages, lastMessageCount, isWindowFocused, currentUser.id, chat, notificationsEnabled, lastNotificationTime])
 
   const showNewMessageNotification = (message: Message, currentChat: Chat) => {
     const chatName = getChatName(currentChat)
@@ -226,7 +250,7 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
       
       if (response.ok) {
         const data = await response.json()
-        setMessages(data.messages)
+        setMessages(data.messages || [])
       }
     } catch (error) {
       console.error('Error fetching messages:', error)
@@ -367,7 +391,8 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
       if (hasPermission) {
         showNotification('تم تفعيل الإشعارات', {
           body: 'ستصلك إشعارات عند وصول رسائل جديدة',
-          icon: '/favicon.ico'
+          icon: '/favicon.ico',
+          tag: 'notifications-enabled'
         })
       }
     }
@@ -375,7 +400,13 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
 
   useEffect(() => {
     const handleVisibilityChange = () => {
-      setIsPolling(!document.hidden)
+      const isVisible = !document.hidden
+      setIsPolling(isVisible)
+      
+      // إذا أصبحت النافذة مرئية، تحديث عدد الرسائل المعروفة
+      if (isVisible) {
+        setLastMessageCount(messages.length)
+      }
     }
 
     document.addEventListener('visibilitychange', handleVisibilityChange)
@@ -383,7 +414,7 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
-  }, [])
+  }, [messages.length])
 
   return (
     <div className="d-flex flex-column h-100 bg-light">
