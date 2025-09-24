@@ -57,18 +57,20 @@ const requestNotificationPermission = async (): Promise<boolean> => {
 // عرض إشعار للمستخدم
 const showNotification = (title: string, options: NotificationOptions) => {
   if ('Notification' in window && Notification.permission === 'granted') {
-    // إغلاق أي إشعارات سابقة بنفس الـ tag لمنع التكرار
-    if (options.tag) {
-      // لا يمكن إغلاق الإشعارات مباشرة، لكن يمكن استخدام service worker للتحكم بها
-    }
-    
-    // استخدام service worker إذا كان متاحًا للإشعارات الأكثر تقدمًا
-    if ('serviceWorker' in navigator) {
+    // استخدام service worker إذا كان متاحًا
+    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
       navigator.serviceWorker.ready.then(registration => {
         registration.showNotification(title, options)
       })
     } else {
-      new Notification(title, options)
+      // استخدام الإشعارات العادية
+      const notification = new Notification(title, options)
+      
+      // إضافة event listener للنقر على الإشعار
+      notification.onclick = function() {
+        window.focus()
+        this.close()
+      }
     }
   }
 }
@@ -108,7 +110,7 @@ const MessageItem = memo(({
       )}
 
       <div className={`d-flex mb-3 ${isMe ? 'justify-content-end' : 'justify-content-start'}`}>
-        {showAvatar && (
+        {!isMe && showAvatar && (
           <img 
             src={message.sender.avatar || '/default-avatar.png'} 
             alt={message.sender.name}
@@ -145,6 +147,17 @@ const MessageItem = memo(({
             )}
           </div>
         </div>
+
+        {isMe && showAvatar && (
+          <img 
+            src={message.sender.avatar || '/default-avatar.png'} 
+            alt={message.sender.name}
+            className="rounded-circle ms-2 align-self-end"
+            width="32"
+            height="32"
+            onError={handleImageError}
+          />
+        )}
       </div>
     </div>
   )
@@ -157,18 +170,28 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
   const [newMessage, setNewMessage] = useState('')
   const [sending, setSending] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const messagesContainerRef = useRef<HTMLDivElement>(null)
   const [isPolling, setIsPolling] = useState(true)
   const [notificationsEnabled, setNotificationsEnabled] = useState(false)
-  const [lastMessageCount, setLastMessageCount] = useState(0)
+  const [lastMessageId, setLastMessageId] = useState<string | null>(null)
   const [isWindowFocused, setIsWindowFocused] = useState(true)
-  const [lastNotificationTime, setLastNotificationTime] = useState<number>(0)
-  const notificationCooldown = 3000 // 3 ثواني بين الإشعارات
+  const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected'>('connected')
 
   // طلب إذن الإشعارات عند تحميل المكون
   useEffect(() => {
     const initializeNotifications = async () => {
-      const hasPermission = await requestNotificationPermission()
-      setNotificationsEnabled(hasPermission)
+      try {
+        const hasPermission = await requestNotificationPermission()
+        setNotificationsEnabled(hasPermission)
+        
+        if (hasPermission) {
+          console.log('الإشعارات مفعلة')
+        } else {
+          console.log('الإشعارات غير مفعلة')
+        }
+      } catch (error) {
+        console.error('Error initializing notifications:', error)
+      }
     }
 
     initializeNotifications()
@@ -178,11 +201,13 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
   useEffect(() => {
     const handleFocus = () => {
       setIsWindowFocused(true)
-      // عند العودة للنافذة، تحديث عدد الرسائل المعروفة
-      setLastMessageCount(messages.length)
+      console.log('النافذة نشطة')
     }
     
-    const handleBlur = () => setIsWindowFocused(false)
+    const handleBlur = () => {
+      setIsWindowFocused(false)
+      console.log('النافذة غير نشطة')
+    }
 
     window.addEventListener('focus', handleFocus)
     window.addEventListener('blur', handleBlur)
@@ -191,28 +216,111 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
       window.removeEventListener('focus', handleFocus)
       window.removeEventListener('blur', handleBlur)
     }
-  }, [messages.length])
+  }, [])
+
+  // محاكاة جلب الرسائل
+  const fetchMessages = useCallback(async () => {
+    if (!isPolling) return
+    
+    try {
+      // محاكاة API call
+      const mockMessages: Message[] = [
+        {
+          id: '1',
+          content: 'مرحبا! كيف حالك؟',
+          senderId: 'user2',
+          type: 'TEXT',
+          encrypted: false,
+          createdAt: new Date(Date.now() - 300000).toISOString(),
+          isRead: true,
+          sender: {
+            id: 'user2',
+            name: 'أحمد',
+            avatar: '/avatar2.png'
+          }
+        },
+        {
+          id: '2',
+          content: 'أهلا! أنا بخير، شكرا لسؤالك. كيف حالك أنت؟',
+          senderId: 'user1',
+          type: 'TEXT',
+          encrypted: false,
+          createdAt: new Date(Date.now() - 240000).toISOString(),
+          isRead: true,
+          sender: currentUser
+        },
+        {
+          id: '3',
+          content: 'أنا أيضا بخير الحمدلله. هل انتهيت من العمل على المشروع؟',
+          senderId: 'user2',
+          type: 'TEXT',
+          encrypted: false,
+          createdAt: new Date(Date.now() - 180000).toISOString(),
+          isRead: true,
+          sender: {
+            id: 'user2',
+            name: 'أحمد',
+            avatar: '/avatar2.png'
+          }
+        }
+      ]
+
+      // إضافة رسالة جديدة لمحاكاة وصول رسائل جديدة
+      if (Math.random() > 0.7 && messages.length > 0) {
+        const newMsg: Message = {
+          id: Date.now().toString(),
+          content: 'هذه رسالة جديدة وصلت الآن!',
+          senderId: 'user2',
+          type: 'TEXT',
+          encrypted: false,
+          createdAt: new Date().toISOString(),
+          isRead: false,
+          sender: {
+            id: 'user2',
+            name: 'أحمد',
+            avatar: '/avatar2.png'
+          }
+        }
+        mockMessages.push(newMsg)
+      }
+
+      setMessages(mockMessages)
+      
+    } catch (error) {
+      console.error('Error fetching messages:', error)
+      setConnectionStatus('disconnected')
+    }
+  }, [isPolling, messages.length, currentUser])
+
+  // جلب الرسائل بشكل دوري
+  useEffect(() => {
+    fetchMessages()
+    
+    const interval = setInterval(fetchMessages, 5000) // كل 5 ثواني
+    
+    return () => {
+      clearInterval(interval)
+    }
+  }, [fetchMessages])
 
   // التحقق من الرسائل الجديدة وعرض الإشعارات
   useEffect(() => {
-    if (messages.length > lastMessageCount && !isWindowFocused && notificationsEnabled) {
-      const newMessages = messages.slice(lastMessageCount)
-      const now = Date.now()
+    if (messages.length === 0) return
+
+    const latestMessage = messages[messages.length - 1]
+    
+    // إذا كانت هناك رسالة جديدة من مستخدم آخر والنافذة غير نشطة
+    if (latestMessage.id !== lastMessageId && 
+        latestMessage.senderId !== currentUser.id && 
+        !isWindowFocused && 
+        notificationsEnabled) {
       
-      // عرض إشعار فقط إذا مر وقت كافٍ منذ آخر إشعار
-      if (now - lastNotificationTime > notificationCooldown) {
-        newMessages.forEach(message => {
-          // عرض إشعار فقط للرسائل من الآخرين
-          if (message.senderId !== currentUser.id) {
-            showNewMessageNotification(message, chat)
-          }
-        })
-        setLastNotificationTime(now)
-      }
+      console.log('عرض إشعار لرسالة جديدة:', latestMessage.content)
+      showNewMessageNotification(latestMessage, chat)
     }
     
-    setLastMessageCount(messages.length)
-  }, [messages, lastMessageCount, isWindowFocused, currentUser.id, chat, notificationsEnabled, lastNotificationTime])
+    setLastMessageId(latestMessage.id)
+  }, [messages, lastMessageId, isWindowFocused, currentUser.id, chat, notificationsEnabled])
 
   const showNewMessageNotification = (message: Message, currentChat: Chat) => {
     const chatName = getChatName(currentChat)
@@ -227,7 +335,7 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
       : message.content
 
     showNotification(title, {
-      body: body.length > 100 ? body.substring(0, 100) + '...' : body,
+      body: body.length > 50 ? body.substring(0, 50) + '...' : body,
       icon: message.sender.avatar || '/default-avatar.png',
       badge: '/favicon.ico',
       tag: `message-${message.id}`,
@@ -236,115 +344,86 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
     })
   }
 
-  const fetchMessages = useCallback(async () => {
-    if (!isPolling) return
-    
-    try {
-      const token = localStorage.getItem('token')
-      const response = await fetch(`/api/messages?chatId=${chat.id}&limit=100&timestamp=${Date.now()}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
-        cache: 'no-cache'
-      })
-      
-      if (response.ok) {
-        const data = await response.json()
-        setMessages(data.messages || [])
-      }
-    } catch (error) {
-      console.error('Error fetching messages:', error)
-    }
-  }, [chat.id, isPolling])
-
-  useEffect(() => {
-    fetchMessages()
-    
-    const interval = setInterval(fetchMessages, 2000)
-    
-    return () => {
-      clearInterval(interval)
-    }
-  }, [fetchMessages])
-
+  // التمرير إلى الأسفل عند وجود رسائل جديدة
   useEffect(() => {
     scrollToBottom()
   }, [messages])
 
-  useEffect(() => {
-    if (messages.length > 0) {
-      markMessagesAsRead()
-    }
-  }, [messages, chat.id])
-
   const markMessagesAsRead = useCallback(async () => {
     try {
-      const token = localStorage.getItem('token')
       const unreadMessages = messages.filter(msg => 
         !msg.isRead && msg.senderId !== currentUser.id
       )
 
       if (unreadMessages.length === 0) return
 
-      await Promise.all(
-        unreadMessages.map(async (message) => {
-          const response = await fetch(`/api/messages/`, {
-            method: 'PUT',
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              messageId: message.id
-            })
-          })
-
-          if (response.ok) {
-            setMessages(prev => prev.map(msg =>
-              msg.id === message.id ? { ...msg, isRead: true } : msg
-            ))
-          }
-        })
-      )
+      // محاكاة علام الرسائل كمقروءة
+      setMessages(prev => prev.map(msg =>
+        !msg.isRead && msg.senderId !== currentUser.id 
+          ? { ...msg, isRead: true } 
+          : msg
+      ))
     } catch (error) {
       console.error('Error marking messages as read:', error)
     }
   }, [messages, currentUser.id])
+
+  useEffect(() => {
+    if (messages.length > 0 && isWindowFocused) {
+      markMessagesAsRead()
+    }
+  }, [messages, isWindowFocused, markMessagesAsRead])
 
   const sendMessage = useCallback(async () => {
     if (!newMessage.trim() || sending) return
 
     setSending(true)
     try {
-      const token = localStorage.getItem('token')
-      const response = await fetch('/api/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          content: newMessage,
-          chatId: chat.id,
-          type: 'TEXT'
-        })
-      })
-
-      if (response.ok) {
-        const message = await response.json()
-        setMessages(prev => [...prev, message])
-        setNewMessage('')
+      // محاكاة إرسال الرسالة
+      const newMsg: Message = {
+        id: Date.now().toString(),
+        content: newMessage,
+        senderId: currentUser.id,
+        type: 'TEXT',
+        encrypted: false,
+        createdAt: new Date().toISOString(),
+        isRead: true,
+        sender: currentUser
       }
+
+      setMessages(prev => [...prev, newMsg])
+      setNewMessage('')
+      
+      // محاكاة رد تلقائي بعد 2 ثانية
+      setTimeout(() => {
+        const autoReply: Message = {
+          id: (Date.now() + 1).toString(),
+          content: 'شكرا على رسالتك! سأرد عليك قريبا.',
+          senderId: 'user2',
+          type: 'TEXT',
+          encrypted: false,
+          createdAt: new Date().toISOString(),
+          isRead: false,
+          sender: {
+            id: 'user2',
+            name: 'أحمد',
+            avatar: '/avatar2.png'
+          }
+        }
+        setMessages(prev => [...prev, autoReply])
+      }, 2000)
       
     } catch (error) {
       console.error('Error sending message:', error)
     } finally {
       setSending(false)
     }
-  }, [newMessage, sending, chat.id])
+  }, [newMessage, sending, currentUser])
 
   const scrollToBottom = useCallback(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    if (messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight
+    }
   }, [])
 
   const getChatName = useCallback((currentChat?: Chat): string => {
@@ -376,7 +455,8 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
   }, [])
 
   const handleKeyPress = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
       sendMessage()
     }
   }, [sendMessage])
@@ -384,6 +464,7 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
   const toggleNotifications = async () => {
     if (notificationsEnabled) {
       setNotificationsEnabled(false)
+      console.log('تم تعطيل الإشعارات')
     } else {
       const hasPermission = await requestNotificationPermission()
       setNotificationsEnabled(hasPermission)
@@ -394,6 +475,7 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
           icon: '/favicon.ico',
           tag: 'notifications-enabled'
         })
+        console.log('تم تفعيل الإشعارات')
       }
     }
   }
@@ -402,11 +484,7 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
     const handleVisibilityChange = () => {
       const isVisible = !document.hidden
       setIsPolling(isVisible)
-      
-      // إذا أصبحت النافذة مرئية، تحديث عدد الرسائل المعروفة
-      if (isVisible) {
-        setLastMessageCount(messages.length)
-      }
+      console.log('حالة التحديث:', isVisible ? 'نشط' : 'موقف')
     }
 
     document.addEventListener('visibilitychange', handleVisibilityChange)
@@ -414,11 +492,12 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
-  }, [messages.length])
+  }, [])
 
   return (
     <div className="d-flex flex-column h-100 bg-light">
-      <div className="p-3 border-bottom bg-white shadow-sm">
+      {/* الهيدر الثابت */}
+      <div className="p-3 border-bottom bg-white shadow-sm" style={{flexShrink: 0}}>
         <div className="d-flex align-items-center">
           <button 
             className="btn btn-light btn-sm me-3 d-md-none"
@@ -439,18 +518,16 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
             />
             <div>
               <h6 className="mb-0 fw-bold">{getChatName()}</h6>
-              <small className="text-muted">
-                {chat.type === 'PRIVATE' ? 
-                  'محادثة خاصة' : 
-                  `${chat.users.length} أعضاء في المجموعة`
-                }
+              <small className={`text-${connectionStatus === 'connected' ? 'success' : 'danger'}`}>
+                <i className={`fas fa-circle me-1`} style={{fontSize: '8px'}}></i>
+                {connectionStatus === 'connected' ? 'متصل' : 'غير متصل'}
               </small>
             </div>
           </div>
 
           {/* زر التحكم في الإشعارات */}
           <button 
-            className={`btn btn-sm me-2 ${notificationsEnabled ? 'btn-success' : 'btn-secondary'}`}
+            className={`btn btn-sm me-2 ${notificationsEnabled ? 'btn-success' : 'btn-outline-secondary'}`}
             onClick={toggleNotifications}
             title={notificationsEnabled ? 'تعطيل الإشعارات' : 'تفعيل الإشعارات'}
           >
@@ -470,7 +547,7 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
             <ul className="dropdown-menu dropdown-menu-end">
               <li>
                 <button className="dropdown-item">
-                  <i className="fas fa-users me-2"></i>معلومات المجموعة
+                  <i className="fas fa-users me-2"></i>معلومات {chat.type === 'GROUP' ? 'المجموعة' : 'المحادثة'}
                 </button>
               </li>
               <li>
@@ -482,7 +559,8 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
               <li><hr className="dropdown-divider" /></li>
               <li>
                 <button className="dropdown-item text-danger">
-                  <i className="fas fa-sign-out-alt me-2"></i>مغادرة المحادثة
+                  <i className="fas fa-sign-out-alt me-2"></i>
+                  {chat.type === 'GROUP' ? 'مغادرة المجموعة' : 'حذف المحادثة'}
                 </button>
               </li>
             </ul>
@@ -490,17 +568,22 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
         </div>
       </div>
 
-      <div className="flex-grow-1 p-3 overflow-auto">
+      {/* منطقة الرسائل - قابلة للتمرير */}
+      <div 
+        ref={messagesContainerRef}
+        className="flex-grow-1 p-3 overflow-auto"
+        style={{minHeight: 0}}
+      >
         <div className="d-flex flex-column">
           {messages.length === 0 ? (
             <div className="text-center text-muted my-5">
-              <i className="fas fa-comments fa-3x mb-3"></i>
+              <i className="fas fa-comments fa-3x mb-3 opacity-50"></i>
               <p>لا توجد رسائل بعد. ابدأ المحادثة الآن!</p>
             </div>
           ) : (
             messages.map((message, index) => {
               const isMe = message.senderId === currentUser.id
-              const showAvatar = chat.type === 'GROUP' && !isMe
+              const showAvatar = chat.type === 'GROUP'
               const showDate = index === 0 || 
                 new Date(message.createdAt).toDateString() !== 
                 new Date(messages[index - 1].createdAt).toDateString()
@@ -522,7 +605,8 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
         </div>
       </div>
 
-      <div className="p-3 border-top bg-white">
+      {/* الفوتر الثابت */}
+      <div className="p-3 border-top bg-white" style={{flexShrink: 0}}>
         <div className="input-group">
           <button className="btn btn-light border" type="button" aria-label="إرفاق ملف">
             <i className="fas fa-paperclip"></i>
