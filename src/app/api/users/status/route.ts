@@ -1,44 +1,24 @@
-// src/pages/api/users/status.ts
-import { NextApiRequest, NextApiResponse } from 'next'
-import { getServerSession } from 'next-auth/next'
-import { authOptions } from '@/lib/auth'
+// src/app/api/users/status/route.ts
+import { NextRequest, NextResponse } from 'next/server'
 
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse
-) {
-  if (req.method !== 'PUT') {
-    return res.status(405).json({ message: 'Method not allowed' })
-  }
-
+export async function PUT(request: NextRequest) {
   try {
-    const session = await getServerSession(req, res, authOptions)
+    const token = request.headers.get('authorization')?.replace('Bearer ', '')
     
-    if (!session || !session.user) {
-      return res.status(401).json({ message: 'Unauthorized' })
+    if (!token) {
+      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 })
     }
 
-    const { status } = req.body
+    const { status } = await request.json()
 
     if (!status || !['ONLINE', 'OFFLINE', 'AWAY'].includes(status)) {
-      return res.status(400).json({ message: 'Invalid status' })
+      return NextResponse.json({ message: 'Invalid status' }, { status: 400 })
     }
 
-    // هنا تقوم بتحديث حالة المستخدم في قاعدة البيانات
-    // هذا مثال باستخدام Prisma - عدله حسب قاعدة البيانات الخاصة بك
+    // مؤقتاً: إرجاع نجاح بدون تحديث قاعدة البيانات
+    console.log(`User status updated to: ${status}`)
     
-    // const updatedUser = await prisma.user.update({
-    //   where: { id: session.user.id },
-    //   data: { 
-    //     status,
-    //     lastSeen: status === 'OFFLINE' ? new Date() : undefined
-    //   }
-    // })
-
-    // مؤقتاً: إرجاع رسالة نجاح بدون تحديث قاعدة البيانات
-    console.log(`User ${session.user.id} status updated to: ${status}`)
-    
-    res.status(200).json({ 
+    return NextResponse.json({ 
       success: true, 
       message: 'Status updated successfully',
       status 
@@ -46,6 +26,17 @@ export default async function handler(
 
   } catch (error) {
     console.error('Error updating user status:', error)
-    res.status(500).json({ message: 'Internal server error' })
+    return NextResponse.json({ message: 'Internal server error' }, { status: 500 })
   }
+}
+
+// إضافة دالة OPTIONS للتعامل مع CORS إذا لزم الأمر
+export async function OPTIONS() {
+  return NextResponse.json({}, {
+    status: 200,
+    headers: {
+      'Access-Control-Allow-Methods': 'PUT, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    }
+  })
 }
