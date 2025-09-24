@@ -30,7 +30,8 @@ function HomeContent() {
   const [chatLoading, setChatLoading] = useState(false)
   const [chats, setChats] = useState<Chat[]>([])
 
-  const chatId = searchParams.get('chatId')
+  // Fix: Add null check for searchParams
+  const chatId = searchParams?.get('chatId') || null
 
   useEffect(() => {
     if (!loading && !user) {
@@ -141,14 +142,13 @@ function HomeContent() {
 
   if (!user) return null
 
-
   if (currentChat) {
     return (
-            <ChatWindow 
-              chat={currentChat}
-              currentUser={user}
-              onBack={handleBack}
-            />
+      <ChatWindow 
+        chat={currentChat}
+        currentUser={user}
+        onBack={handleBack}
+      />
     )
   }
 
@@ -170,4 +170,4 @@ export default function Home() {
       <HomeContent />
     </Suspense>
   )
-    }
+}
