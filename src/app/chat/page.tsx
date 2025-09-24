@@ -253,11 +253,7 @@ export default function ChatPage() {
             >
               <div className="d-flex align-items-center">
                 <h4 className="mb-0 fw-bold dark-text me-3">SURAACHAT</h4>
-                <div className="d-flex align-items-center">
-                  <span className={`badge ${currentUserStatus === 'ONLINE' ? 'bg-success' : currentUserStatus === 'AWAY' ? 'bg-warning' : 'bg-secondary'} me-2`}>
-                    {currentUserStatus === 'ONLINE' ? '🟢 متصل' : currentUserStatus === 'AWAY' ? '🟡 بعيد' : '⚫ غير متصل'}
-                  </span>
-                </div>
+                
               </div>
               
               <div className="d-flex align-items-center">
