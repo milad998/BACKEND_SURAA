@@ -90,18 +90,21 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
       // تحديث كل الرسائل غير المقروءة
       await Promise.all(
         unreadMessages.map(async (message) => {
-          const response = await fetch(`/api/messages/${message.id}/read`, {
+          const response = await fetch(`/api/messages/`, {
             method: 'PUT',
             headers: {
               'Authorization': `Bearer ${token}`,
               'Content-Type': 'application/json'
-            }
+            },
+            body: JSON.stringify({
+              messageId: message.id // إرسال messageId في الـ body
+            })
           })
 
           if (response.ok) {
             // تحديث الحالة المحلية
             setMessages(prev => prev.map(msg =>
-              msg.id === message.id ? { ...msg, read: true } : msg
+              msg.id === message.id ? { ...msg, isRead: true } : msg
             ))
           }
         })
@@ -307,7 +310,7 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
                         </span>
                         {isMe && (
                           <span className="ms-1">
-                            {message.read ? (
+                            {message.isRead ? (
                               <i className="fas fa-check-double text-info"></i>
                             ) : (
                               <i className="fas fa-check"></i>
@@ -369,4 +372,4 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
       </div>
     </div>
   )
-                        }
+    }
