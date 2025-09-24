@@ -35,7 +35,32 @@ interface ChatWindowProps {
   onBack: () => void
 }
 
-// مكون الرسالة المفردة مع memo لمنع إعادة التصيير غير الضرورية
+// طلب إذن الإشعارات
+const requestNotificationPermission = async (): Promise<boolean> => {
+  if (!('Notification' in window)) {
+    console.log('This browser does not support notifications')
+    return false
+  }
+
+  if (Notification.permission === 'granted') {
+    return true
+  }
+
+  if (Notification.permission !== 'denied') {
+    const permission = await Notification.requestPermission()
+    return permission === 'granted'
+  }
+
+  return false
+}
+
+// عرض إشعار للمستخدم
+const showNotification = (title: string, options: NotificationOptions) => {
+  if ('Notification' in window && Notification.permission === 'granted') {
+    new Notification(title, options)
+  }
+}
+
 const MessageItem = memo(({ 
   message, 
   isMe, 
@@ -57,7 +82,6 @@ const MessageItem = memo(({
 
   return (
     <div>
-      {/* تاريخ جديد */}
       {showDate && (
         <div className="text-center my-3">
           <span className="badge bg-secondary px-3 py-2">
@@ -71,7 +95,6 @@ const MessageItem = memo(({
         </div>
       )}
 
-      {/* الرسالة */}
       <div className={`d-flex mb-3 ${isMe ? 'justify-content-end' : 'justify-content-start'}`}>
         {showAvatar && (
           <img 
@@ -123,8 +146,72 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
   const [sending, setSending] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const [isPolling, setIsPolling] = useState(true)
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false)
+  const [lastMessageCount, setLastMessageCount] = useState(0)
+  const [isWindowFocused, setIsWindowFocused] = useState(true)
 
-  // استخدام useCallback لمنع إعادة إنشاء الدوال
+  // طلب إذن الإشعارات عند تحميل المكون
+  useEffect(() => {
+    const initializeNotifications = async () => {
+      const hasPermission = await requestNotificationPermission()
+      setNotificationsEnabled(hasPermission)
+    }
+
+    initializeNotifications()
+  }, [])
+
+  // تتبع حالة تركيز النافذة
+  useEffect(() => {
+    const handleFocus = () => setIsWindowFocused(true)
+    const handleBlur = () => setIsWindowFocused(false)
+
+    window.addEventListener('focus', handleFocus)
+    window.addEventListener('blur', handleBlur)
+
+    return () => {
+      window.removeEventListener('focus', handleFocus)
+      window.removeEventListener('blur', handleBlur)
+    }
+  }, [])
+
+  // التحقق من الرسائل الجديدة وعرض الإشعارات
+  useEffect(() => {
+    if (messages.length > lastMessageCount && !isWindowFocused) {
+      const newMessages = messages.slice(lastMessageCount)
+      
+      newMessages.forEach(message => {
+        // عرض إشعار فقط للرسائل من الآخرين
+        if (message.senderId !== currentUser.id) {
+          showNewMessageNotification(message, chat)
+        }
+      })
+    }
+    
+    setLastMessageCount(messages.length)
+  }, [messages, lastMessageCount, isWindowFocused, currentUser.id, chat])
+
+  const showNewMessageNotification = (message: Message, currentChat: Chat) => {
+    const chatName = getChatName(currentChat)
+    const senderName = currentChat.type === 'GROUP' ? message.sender.name : ''
+
+    const title = currentChat.type === 'GROUP' 
+      ? `رسالة جديدة في ${chatName}`
+      : chatName
+
+    const body = currentChat.type === 'GROUP'
+      ? `${senderName}: ${message.content}`
+      : message.content
+
+    showNotification(title, {
+      body: body.length > 100 ? body.substring(0, 100) + '...' : body,
+      icon: message.sender.avatar || '/default-avatar.png',
+      badge: '/favicon.ico',
+      tag: `message-${message.id}`,
+      requireInteraction: true,
+      silent: false
+    })
+  }
+
   const fetchMessages = useCallback(async () => {
     if (!isPolling) return
     
@@ -134,7 +221,7 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
         headers: {
           'Authorization': `Bearer ${token}`
         },
-        cache: 'no-cache' // منع التخزين المؤقت
+        cache: 'no-cache'
       })
       
       if (response.ok) {
@@ -146,23 +233,20 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
     }
   }, [chat.id, isPolling])
 
-  // جلب الرسائل كل 2 ثانية مع تحكم أفضل
   useEffect(() => {
-    fetchMessages() // جلب فوري عند التحميل
+    fetchMessages()
     
-    const interval = setInterval(fetchMessages, 2000) // كل 2 ثانية
+    const interval = setInterval(fetchMessages, 2000)
     
     return () => {
       clearInterval(interval)
     }
   }, [fetchMessages])
 
-  // التمرير إلى الأسفل عند تغيير الرسائل فقط
   useEffect(() => {
     scrollToBottom()
-  }, [messages]) // فقط عندما تتغير الرسائل
+  }, [messages])
 
-  // تحديث حالة القراءة للرسائل عند فتح المحادثة
   useEffect(() => {
     if (messages.length > 0) {
       markMessagesAsRead()
@@ -178,7 +262,6 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
 
       if (unreadMessages.length === 0) return
 
-      // تحديث كل الرسائل غير المقروءة
       await Promise.all(
         unreadMessages.map(async (message) => {
           const response = await fetch(`/api/messages/`, {
@@ -193,7 +276,6 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
           })
 
           if (response.ok) {
-            // تحديث الحالة المحلية فقط للرسائل التي تم تحديثها
             setMessages(prev => prev.map(msg =>
               msg.id === message.id ? { ...msg, isRead: true } : msg
             ))
@@ -241,12 +323,13 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [])
 
-  const getChatName = useCallback((): string => {
-    if (chat.type === 'PRIVATE') {
-      const otherUser = chat.users.find((u: ChatUser) => u.user.id !== currentUser.id)
+  const getChatName = useCallback((currentChat?: Chat): string => {
+    const chatToUse = currentChat || chat
+    if (chatToUse.type === 'PRIVATE') {
+      const otherUser = chatToUse.users.find((u: ChatUser) => u.user.id !== currentUser.id)
       return otherUser?.user.name || 'محادثة خاصة'
     }
-    return chat.name || `مجموعة (${chat.users.length})`
+    return chatToUse.name || `مجموعة (${chatToUse.users.length})`
   }, [chat, currentUser.id])
 
   const getChatAvatar = useCallback((): string => {
@@ -274,7 +357,22 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
     }
   }, [sendMessage])
 
-  // إيقاف الاستطلاع عند عدم تركيز النافذة لتوفير الموارد
+  const toggleNotifications = async () => {
+    if (notificationsEnabled) {
+      setNotificationsEnabled(false)
+    } else {
+      const hasPermission = await requestNotificationPermission()
+      setNotificationsEnabled(hasPermission)
+      
+      if (hasPermission) {
+        showNotification('تم تفعيل الإشعارات', {
+          body: 'ستصلك إشعارات عند وصول رسائل جديدة',
+          icon: '/favicon.ico'
+        })
+      }
+    }
+  }
+
   useEffect(() => {
     const handleVisibilityChange = () => {
       setIsPolling(!document.hidden)
@@ -289,7 +387,6 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
 
   return (
     <div className="d-flex flex-column h-100 bg-light">
-      {/* رأس المحادثة - لا يتغير إلا عند تغيير المحادثة */}
       <div className="p-3 border-bottom bg-white shadow-sm">
         <div className="d-flex align-items-center">
           <button 
@@ -320,6 +417,15 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
             </div>
           </div>
 
+          {/* زر التحكم في الإشعارات */}
+          <button 
+            className={`btn btn-sm me-2 ${notificationsEnabled ? 'btn-success' : 'btn-secondary'}`}
+            onClick={toggleNotifications}
+            title={notificationsEnabled ? 'تعطيل الإشعارات' : 'تفعيل الإشعارات'}
+          >
+            <i className={`fas ${notificationsEnabled ? 'fa-bell' : 'fa-bell-slash'}`}></i>
+          </button>
+
           <div className="dropdown">
             <button 
               className="btn btn-light btn-sm dropdown-toggle"
@@ -337,8 +443,9 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
                 </button>
               </li>
               <li>
-                <button className="dropdown-item">
-                  <i className="fas fa-bell me-2"></i>إعدادات الإشعارات
+                <button className="dropdown-item" onClick={toggleNotifications}>
+                  <i className={`fas ${notificationsEnabled ? 'fa-bell' : 'fa-bell-slash'} me-2`}></i>
+                  {notificationsEnabled ? 'تعطيل الإشعارات' : 'تفعيل الإشعارات'}
                 </button>
               </li>
               <li><hr className="dropdown-divider" /></li>
@@ -352,7 +459,6 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
         </div>
       </div>
 
-      {/* منطقة الرسائل - يتم تحديثها فقط عند تغيير الرسائل */}
       <div className="flex-grow-1 p-3 overflow-auto">
         <div className="d-flex flex-column">
           {messages.length === 0 ? (
@@ -385,7 +491,6 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
         </div>
       </div>
 
-      {/* منطقة إرسال الرسالة */}
       <div className="p-3 border-top bg-white">
         <div className="input-group">
           <button className="btn btn-light border" type="button" aria-label="إرفاق ملف">
