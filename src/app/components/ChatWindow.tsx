@@ -18,7 +18,7 @@ interface Message {
   type: string
   encrypted: boolean
   createdAt: string
-  read?: boolean // أضفنا هذه الخاصية
+  isRead?: boolean
   sender: User
 }
 
@@ -40,22 +40,6 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
   const [newMessage, setNewMessage] = useState('')
   const [sending, setSending] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const audioRef = useRef<HTMLAudioElement | null>(null)
-  const [lastMessageId, setLastMessageId] = useState<string | null>(null)
-  const [isSoundEnabled, setIsSoundEnabled] = useState(true)
-
-  // تحميل الصوت عند بدء التشغيل
-  useEffect(() => {
-    audioRef.current = new Audio('https://assets.mixkit.co/sfx/preview/mixkit-correct-answer-tone-2870.mp3')
-    audioRef.current.preload = 'auto'
-    
-    return () => {
-      if (audioRef.current) {
-        audioRef.current.pause()
-        audioRef.current = null
-      }
-    }
-  }, [])
 
   // جلب الرسائل وتحديثها كل 5 ثواني
   useEffect(() => {
@@ -69,27 +53,12 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
     scrollToBottom()
   }, [messages])
 
-  // تشغيل الصوت عند وصول رسالة جديدة
+  // تحديث حالة القراءة للرسائل عند فتح المحادثة
   useEffect(() => {
-    if (messages.length > 0 && audioRef.current && isSoundEnabled) {
-      const lastMessage = messages[messages.length - 1]
-      
-      // إذا كانت الرسالة جديدة وليست من المستخدم الحالي
-      if (lastMessage.id !== lastMessageId && lastMessage.senderId !== currentUser.id) {
-        playNotificationSound()
-        setLastMessageId(lastMessage.id)
-      }
+    if (messages.length > 0) {
+      markMessagesAsRead()
     }
-  }, [messages, lastMessageId, currentUser.id, isSoundEnabled])
-
-  const playNotificationSound = () => {
-    if (audioRef.current) {
-      audioRef.current.currentTime = 0
-      audioRef.current.play().catch((error) => {
-        console.log('Failed to play notification sound:', error)
-      })
-    }
-  }
+  }, [messages, chat.id])
 
   const fetchMessages = async () => {
     try {
@@ -106,6 +75,39 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
       }
     } catch (error) {
       console.error('Error fetching messages:', error)
+    }
+  }
+
+  const markMessagesAsRead = async () => {
+    try {
+      const token = localStorage.getItem('token')
+      const unreadMessages = messages.filter(msg => 
+        !msg.isRead && msg.senderId !== currentUser.id
+      )
+
+      if (unreadMessages.length === 0) return
+
+      // تحديث كل الرسائل غير المقروءة
+      await Promise.all(
+        unreadMessages.map(async (message) => {
+          const response = await fetch(`/api/messages/${message.id}/read`, {
+            method: 'PUT',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
+          })
+
+          if (response.ok) {
+            // تحديث الحالة المحلية
+            setMessages(prev => prev.map(msg =>
+              msg.id === message.id ? { ...msg, read: true } : msg
+            ))
+          }
+        })
+      )
+    } catch (error) {
+      console.error('Error marking messages as read:', error)
     }
   }
 
@@ -192,7 +194,14 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
           </button>
           
           <div className="flex-grow-1 d-flex align-items-center">
-            
+            <img 
+              src={getChatAvatar()} 
+              alt={getChatName()}
+              className="rounded-circle me-3"
+              width="40"
+              height="40"
+              onError={handleImageError}
+            />
             <div>
               <h6 className="mb-0 fw-bold">{getChatName()}</h6>
               <small className="text-muted">
@@ -203,15 +212,6 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
               </small>
             </div>
           </div>
-
-          {/* زر التحكم بالإشعارات الصوتية */}
-          <button 
-            className="btn btn-light btn-sm me-2"
-            onClick={() => setIsSoundEnabled(!isSoundEnabled)}
-            aria-label={isSoundEnabled ? "كتم الصوت" : "تشغيل الصوت"}
-          >
-            <i className={isSoundEnabled ? "fas fa-bell" : "fas fa-bell-slash"}></i>
-          </button>
 
           <div className="dropdown">
             <button 
@@ -306,8 +306,14 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
                           {formatTime(message.createdAt)}
                         </span>
                         {isMe && (
-                          <i className="fas fa-check ms-1"></i> // تم إصلاح هذا السطر
-                         )}
+                          <span className="ms-1">
+                            {message.read ? (
+                              <i className="fas fa-check-double text-info"></i>
+                            ) : (
+                              <i className="fas fa-check"></i>
+                            )}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -363,4 +369,4 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
       </div>
     </div>
   )
-}
+                        }
