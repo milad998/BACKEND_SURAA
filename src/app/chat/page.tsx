@@ -137,38 +137,11 @@ export default function ChatPage() {
       } else {
         console.error('Failed to fetch users:', response.status)
         // بيانات وهمية للاختبار
-        setUsers([
-          {
-            id: '1',
-            name: 'مستخدم تجريبي 1',
-            email: 'test1@example.com',
-            status: 'ONLINE'
-          },
-          {
-            id: '2',
-            name: 'مستخدم تجريبي 2',
-            email: 'test2@example.com',
-            status: 'OFFLINE'
-          }
-        ])
       }
     } catch (error) {
       console.error('Error fetching users:', error)
       // بيانات وهمية في حالة الخطأ
-      setUsers([
-        {
-          id: '1',
-          name: 'مستخدم تجريبي 1',
-          email: 'test1@example.com',
-          status: 'ONLINE'
-        },
-        {
-          id: '2', 
-          name: 'مستخدم تجريبي 2',
-          email: 'test2@example.com',
-          status: 'OFFLINE'
-        }
-      ])
+      
     } finally {
       setIsLoading(false)
     }
@@ -191,15 +164,15 @@ export default function ChatPage() {
 
       if (response.ok) {
         const newChat = await response.json()
-        router.push(`/chat/${newChat.id}`)
+        router.push(`/?chatid=${newChat.id}`)
       } else {
         // إذا فشل إنشاء المحادثة، انتقل إلى صفحة محادثة افتراضية
-        router.push(`/chat/${receiverId}`)
+        router.push(`/?chatid=${receiverId}`)
       }
     } catch (error) {
       console.error('Error starting private chat:', error)
       // في حالة الخطأ، انتقل إلى صفحة محادثة افتراضية
-      router.push(`/chat/${receiverId}`)
+      router.push(`/?chatid=${receiverId}`)
     }
   }
 
