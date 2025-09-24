@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback, memo } from 'react'
 
 interface User {
   id: string
@@ -35,38 +35,106 @@ interface ChatWindowProps {
   onBack: () => void
 }
 
+// مكون الرسالة المفردة مع memo لمنع إعادة التصيير غير الضرورية
+const MessageItem = memo(({ 
+  message, 
+  isMe, 
+  showAvatar, 
+  showDate, 
+  chatType,
+  formatTime 
+}: { 
+  message: Message
+  isMe: boolean
+  showAvatar: boolean
+  showDate: boolean
+  chatType: string
+  formatTime: (dateString: string) => string
+}) => {
+  const handleImageError = (e: React.SyntheticEvent<HTMLImageElement>) => {
+    e.currentTarget.src = '/default-avatar.png'
+  }
+
+  return (
+    <div>
+      {/* تاريخ جديد */}
+      {showDate && (
+        <div className="text-center my-3">
+          <span className="badge bg-secondary px-3 py-2">
+            {new Date(message.createdAt).toLocaleDateString('ar-EG', {
+              weekday: 'long',
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric'
+            })}
+          </span>
+        </div>
+      )}
+
+      {/* الرسالة */}
+      <div className={`d-flex mb-3 ${isMe ? 'justify-content-end' : 'justify-content-start'}`}>
+        {showAvatar && (
+          <img 
+            src={message.sender.avatar || '/default-avatar.png'} 
+            alt={message.sender.name}
+            className="rounded-circle me-2 align-self-end"
+            width="32"
+            height="32"
+            onError={handleImageError}
+          />
+        )}
+        
+        <div className={`message-bubble p-3 position-relative rounded-3 ${
+          isMe ? 'message-sent bg-primary text-white' : 'message-received bg-white border'
+        }`} style={{ maxWidth: '70%' }}>
+          {chatType === 'GROUP' && !isMe && (
+            <div className="message-sender fw-bold mb-1 small">
+              {message.sender.name}
+            </div>
+          )}
+          
+          <div className="message-content">{message.content}</div>
+          
+          <div className={`message-time mt-1 small ${isMe ? 'text-light' : 'text-muted'}`}>
+            <span className="opacity-75">
+              {formatTime(message.createdAt)}
+            </span>
+            {isMe && (
+              <span className="ms-1">
+                {message.isRead ? (
+                  <i className="fas fa-check-double text-info"></i>
+                ) : (
+                  <i className="fas fa-check"></i>
+                )}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+})
+
+MessageItem.displayName = 'MessageItem'
+
 export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [newMessage, setNewMessage] = useState('')
   const [sending, setSending] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const [isPolling, setIsPolling] = useState(true)
 
-  // جلب الرسائل وتحديثها كل 5 ثواني
-  useEffect(() => {
-    fetchMessages()
-    const interval = setInterval(fetchMessages, 5000)
-    return () => clearInterval(interval)
-  }, [chat.id])
-
-  // التمرير إلى الأسفل عند تغيير الرسائل
-  useEffect(() => {
-    scrollToBottom()
-  }, [messages])
-
-  // تحديث حالة القراءة للرسائل عند فتح المحادثة
-  useEffect(() => {
-    if (messages.length > 0) {
-      markMessagesAsRead()
-    }
-  }, [messages, chat.id])
-
-  const fetchMessages = async () => {
+  // استخدام useCallback لمنع إعادة إنشاء الدوال
+  const fetchMessages = useCallback(async () => {
+    if (!isPolling) return
+    
     try {
       const token = localStorage.getItem('token')
-      const response = await fetch(`/api/messages?chatId=${chat.id}&limit=100`, {
+      const response = await fetch(`/api/messages?chatId=${chat.id}&limit=100&timestamp=${Date.now()}`, {
         headers: {
           'Authorization': `Bearer ${token}`
-        }
+        },
+        cache: 'no-cache' // منع التخزين المؤقت
       })
       
       if (response.ok) {
@@ -76,9 +144,32 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
     } catch (error) {
       console.error('Error fetching messages:', error)
     }
-  }
+  }, [chat.id, isPolling])
 
-  const markMessagesAsRead = async () => {
+  // جلب الرسائل كل 2 ثانية مع تحكم أفضل
+  useEffect(() => {
+    fetchMessages() // جلب فوري عند التحميل
+    
+    const interval = setInterval(fetchMessages, 2000) // كل 2 ثانية
+    
+    return () => {
+      clearInterval(interval)
+    }
+  }, [fetchMessages])
+
+  // التمرير إلى الأسفل عند تغيير الرسائل فقط
+  useEffect(() => {
+    scrollToBottom()
+  }, [messages]) // فقط عندما تتغير الرسائل
+
+  // تحديث حالة القراءة للرسائل عند فتح المحادثة
+  useEffect(() => {
+    if (messages.length > 0) {
+      markMessagesAsRead()
+    }
+  }, [messages, chat.id])
+
+  const markMessagesAsRead = useCallback(async () => {
     try {
       const token = localStorage.getItem('token')
       const unreadMessages = messages.filter(msg => 
@@ -97,12 +188,12 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
               'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-              messageId: message.id // إرسال messageId في الـ body
+              messageId: message.id
             })
           })
 
           if (response.ok) {
-            // تحديث الحالة المحلية
+            // تحديث الحالة المحلية فقط للرسائل التي تم تحديثها
             setMessages(prev => prev.map(msg =>
               msg.id === message.id ? { ...msg, isRead: true } : msg
             ))
@@ -112,9 +203,9 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
     } catch (error) {
       console.error('Error marking messages as read:', error)
     }
-  }
+  }, [messages, currentUser.id])
 
-  const sendMessage = async () => {
+  const sendMessage = useCallback(async () => {
     if (!newMessage.trim() || sending) return
 
     setSending(true)
@@ -144,48 +235,61 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
     } finally {
       setSending(false)
     }
-  }
+  }, [newMessage, sending, chat.id])
 
-  const scrollToBottom = () => {
+  const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }
+  }, [])
 
-  const getChatName = (): string => {
+  const getChatName = useCallback((): string => {
     if (chat.type === 'PRIVATE') {
       const otherUser = chat.users.find((u: ChatUser) => u.user.id !== currentUser.id)
       return otherUser?.user.name || 'محادثة خاصة'
     }
     return chat.name || `مجموعة (${chat.users.length})`
-  }
+  }, [chat, currentUser.id])
 
-  const getChatAvatar = (): string => {
+  const getChatAvatar = useCallback((): string => {
     if (chat.type === 'PRIVATE') {
       const otherUser = chat.users.find((u: ChatUser) => u.user.id !== currentUser.id)
       return otherUser?.user.avatar || '/default-avatar.png'
     }
     return '/group-avatar.png'
-  }
+  }, [chat, currentUser.id])
 
-  const formatTime = (dateString: string): string => {
+  const formatTime = useCallback((dateString: string): string => {
     return new Date(dateString).toLocaleTimeString('ar-EG', {
       hour: '2-digit',
       minute: '2-digit'
     })
-  }
+  }, [])
 
-  const handleImageError = (e: React.SyntheticEvent<HTMLImageElement>) => {
+  const handleImageError = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
     e.currentTarget.src = '/default-avatar.png'
-  }
+  }, [])
 
-  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyPress = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       sendMessage()
     }
-  }
+  }, [sendMessage])
+
+  // إيقاف الاستطلاع عند عدم تركيز النافذة لتوفير الموارد
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      setIsPolling(!document.hidden)
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [])
 
   return (
     <div className="d-flex flex-column h-100 bg-light">
-      {/* رأس المحادثة */}
+      {/* رأس المحادثة - لا يتغير إلا عند تغيير المحادثة */}
       <div className="p-3 border-bottom bg-white shadow-sm">
         <div className="d-flex align-items-center">
           <button 
@@ -248,7 +352,7 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
         </div>
       </div>
 
-      {/* منطقة الرسائل */}
+      {/* منطقة الرسائل - يتم تحديثها فقط عند تغيير الرسائل */}
       <div className="flex-grow-1 p-3 overflow-auto">
         <div className="d-flex flex-column">
           {messages.length === 0 ? (
@@ -265,62 +369,15 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
                 new Date(messages[index - 1].createdAt).toDateString()
 
               return (
-                <div key={message.id}>
-                  {/* تاريخ جديد */}
-                  {showDate && (
-                    <div className="text-center my-3">
-                      <span className="badge bg-secondary px-3 py-2">
-                        {new Date(message.createdAt).toLocaleDateString('ar-EG', {
-                          weekday: 'long',
-                          year: 'numeric',
-                          month: 'long',
-                          day: 'numeric'
-                        })}
-                      </span>
-                    </div>
-                  )}
-
-                  {/* الرسالة */}
-                  <div className={`d-flex mb-3 ${isMe ? 'justify-content-end' : 'justify-content-start'}`}>
-                    {showAvatar && (
-                      <img 
-                        src={message.sender.avatar || '/default-avatar.png'} 
-                        alt={message.sender.name}
-                        className="rounded-circle me-2 align-self-end"
-                        width="32"
-                        height="32"
-                        onError={handleImageError}
-                      />
-                    )}
-                    
-                    <div className={`message-bubble p-3 position-relative rounded-3 ${
-                      isMe ? 'message-sent bg-primary text-white' : 'message-received bg-white border'
-                    }`} style={{ maxWidth: '70%' }}>
-                      {chat.type === 'GROUP' && !isMe && (
-                        <div className="message-sender fw-bold mb-1 small">
-                          {message.sender.name}
-                        </div>
-                      )}
-                      
-                      <div className="message-content">{message.content}</div>
-                      
-                      <div className={`message-time mt-1 small ${isMe ? 'text-light' : 'text-muted'}`}>
-                        <span className="opacity-75">
-                          {formatTime(message.createdAt)}
-                        </span>
-                        {isMe && (
-                          <span className="ms-1">
-                            {message.isRead ? (
-                              <i className="fas fa-check-double text-info"></i>
-                            ) : (
-                              <i className="fas fa-check"></i>
-                            )}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                <MessageItem
+                  key={message.id}
+                  message={message}
+                  isMe={isMe}
+                  showAvatar={showAvatar}
+                  showDate={showDate}
+                  chatType={chat.type}
+                  formatTime={formatTime}
+                />
               )
             })
           )}
@@ -372,4 +429,4 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
       </div>
     </div>
   )
-    }
+}
