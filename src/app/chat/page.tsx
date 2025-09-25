@@ -242,16 +242,9 @@ export default function ChatPage() {
     } else {
       return <span className="badge bg-secondary">⚫</span>
     }
-  }
+        }
 
-  const getStatusText = (status: 'ONLINE' | 'OFFLINE' | 'AWAY') => {
-    switch(status) {
-      case 'ONLINE': return 'متصل'
-      case 'AWAY': return 'بعيد'
-      case 'OFFLINE': return 'غير متصل'
-      default: return status
-    }
-  }
+  
 
   if (loading || isLoading) {
     return (
@@ -272,15 +265,15 @@ export default function ChatPage() {
     <div className="container-fluid vh-100 dark-theme">
       <div className="row h-100">
         <div className="col-12">
-          <div className="p-3">
+          <div ">
             {/* Header */}
             <div className="d-flex justify-content-between align-items-center mb-3 shadow-sm p-3 bg-body-tertiary rounded"
               style={{backdropFilter:'blur(27px)'}}
             >
               <div className="d-flex align-items-center">
-                <h4 className="mb-0 fw-bold dark-text me-3">SURAACHAT</h4>
+                <h4 className="mb-0 fw-bold dark-text ">SURAACHAT</h4>
                 <span className="badge bg-primary">
-                  {getStatusText(currentUserStatus)}
+                  
                 </span>
               </div>
               
