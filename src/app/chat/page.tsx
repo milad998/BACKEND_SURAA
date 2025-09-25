@@ -339,7 +339,7 @@ export default function ChatPage() {
                         </div>
                         <div>
                           <h6 className="dark-text mb-1">{userItem.name}</h6>
-                          <small className="dark-text-muted">{getStatusText(userItem.status)}</small>
+                          <small className="dark-text-muted">{userItem.status}</small>
                         </div>
                       </div>
                       
