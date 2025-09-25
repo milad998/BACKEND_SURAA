@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
     const unreadMessages = await prisma.message.findMany({
       where: {
         receiverId: userId,
-        read: false
+        isRead: false
       },
       include: {
         sender: {
