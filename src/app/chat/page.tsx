@@ -236,11 +236,11 @@ export default function ChatPage() {
     const isOnline = onlineUsers.has(userItem.id) || userItem.status === 'ONLINE'
     
     if (isOnline) {
-      return <span className="badge bg-success">🟢</span>
+      return <span className="badge ">🟢</span>
     } else if (userItem.status === 'AWAY') {
-      return <span className="badge bg-warning">🟡</span>
+      return <span className="badge ">🟡</span>
     } else {
-      return <span className="badge bg-secondary">⚫</span>
+      return <span className="badge ">⚫</span>
     }
         }
 
@@ -265,7 +265,7 @@ export default function ChatPage() {
     <div className="container-fluid vh-100 dark-theme">
       <div className="row h-100">
         <div className="col-12">
-          <div ">
+          <div>
             {/* Header */}
             <div className="d-flex justify-content-between align-items-center mb-3 shadow-sm p-3 bg-body-tertiary rounded"
               style={{backdropFilter:'blur(27px)'}}
