@@ -22,6 +22,61 @@ export default function ChatPage() {
   const [currentUserStatus, setCurrentUserStatus] = useState<'ONLINE' | 'OFFLINE' | 'AWAY'>('ONLINE')
   const socketRef = useRef<any>(null)
   
+  // دالة لجلب المستخدمين من API الصحيح
+  const fetchUsers = async () => {
+    try {
+      setIsLoading(true)
+      const token = localStorage.getItem('token')
+      
+      // استخدام API صحيح لجلب المستخدمين
+      const response = await fetch('/api/auth/register', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      
+      if (response.ok) {
+        const data = await response.json()
+        const usersData = data.users || data
+        
+        const formattedUsers: ChatUser[] = usersData
+          .filter((u: any) => u.id !== authUser?.id)
+          .map((u: any) => ({
+            id: u.id,
+            name: u.name || u.email?.split('@')[0] || 'مستخدم',
+            email: u.email,
+            status: u.status || 'OFFLINE',
+            lastSeen: u.lastSeen,
+            avatar: u.avatar
+          }))
+
+        setUsers(formattedUsers)
+        
+        // تحديث حالة المستخدمين المتصلين
+        const onlineSet = new Set<string>()
+        formattedUsers.forEach((u: ChatUser) => {
+          if (u.status === 'ONLINE') {
+            onlineSet.add(u.id)
+          }
+        })
+        setOnlineUsers(onlineSet)
+      } else {
+        console.error('Failed to fetch users:', response.status)
+        // استخدام بيانات وهمية للاختبار إذا فشل الاتصال
+        
+      }
+    } catch (error) {
+      console.error('Error fetching users:', error)
+      // استخدام بيانات وهمية في حالة الخطأ
+      
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // بيانات وهمية للاختبار
+  
 
   useEffect(() => {
     if (!loading && !authUser) {
@@ -32,18 +87,18 @@ export default function ChatPage() {
     if (authUser) {
       initializeSocket()
       fetchUsers()
+      // تحديث حالة المستخدم إلى ONLINE عند الدخول
+      updateUserStatusOnServer('ONLINE')
     }
 
     return () => {
       if (socketRef.current) {
+        // تحديث الحالة إلى OFFLINE عند الخروج
+        updateUserStatusOnServer('OFFLINE')
         socketRef.current.disconnect()
       }
     }
   }, [authUser, loading, router])
-
-  useEffect(()=>{
-    console.log("change")
-  },[currentUserStatus])
 
   const initializeSocket = async () => {
     if (!authUser || socketRef.current) return
@@ -60,7 +115,6 @@ export default function ChatPage() {
       socketRef.current.on('connect', () => {
         console.log('Connected to server')
         socketRef.current?.emit('join-room', authUser.id)
-        // تحديث حالة المستخدم الحالي إلى ONLINE عند الاتصال
         setCurrentUserStatus('ONLINE')
       })
 
@@ -103,54 +157,6 @@ export default function ChatPage() {
     )
   }
 
-  const fetchUsers = async () => {
-    try {
-      setIsLoading(true)
-      const token = localStorage.getItem('token')
-      const response = await fetch('/api/auth/register', {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      })
-      
-      if (response.ok) {
-        const data = await response.json()
-        const usersData = data.users || data
-        
-        const formattedUsers: ChatUser[] = usersData
-          .filter((u: any) => u.id !== authUser?.id)
-          .map((u: any) => ({
-            id: u.id,
-            name: u.name || 'مستخدم',
-            email: u.email,
-            status: u.status || 'OFFLINE',
-            lastSeen: u.lastSeen,
-            avatar: u.avatar
-          }))
-
-        setUsers(formattedUsers)
-        
-        const onlineSet = new Set<string>()
-        formattedUsers.forEach((u: ChatUser) => {
-          if (u.status === 'ONLINE') {
-            onlineSet.add(u.id)
-          }
-        })
-        setOnlineUsers(onlineSet)
-      } else {
-        console.error('Failed to fetch users:', response.status)
-        // بيانات وهمية للاختبار
-      }
-    } catch (error) {
-      console.error('Error fetching users:', error)
-      // بيانات وهمية في حالة الخطأ
-      
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
   const startPrivateChat = async (receiverId: string) => {
     try {
       const token = localStorage.getItem('token')
@@ -171,12 +177,11 @@ export default function ChatPage() {
         router.push(`/?chatId=${newChat.id}`)
       } else {
         // إذا فشل إنشاء المحادثة، انتقل إلى صفحة محادثة افتراضية
-        router.push(`/?chatId=${receiverId}`)
+        router.push(`/chat/${receiverId}`)
       }
     } catch (error) {
       console.error('Error starting private chat:', error)
-      // في حالة الخطأ، انتقل إلى صفحة محادثة افتراضية
-      router.push(`/?chatId=${receiverId}`)
+      router.push(`/chat/${receiverId}`)
     }
   }
 
@@ -185,7 +190,7 @@ export default function ChatPage() {
 
     try {
       const token = localStorage.getItem('token')
-      await fetch('/api/users/status', {
+      const response = await fetch('/api/users/status', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -194,17 +199,24 @@ export default function ChatPage() {
         body: JSON.stringify({ status })
       })
 
-      if (socketRef.current) {
-        socketRef.current.emit('user-status', {
-          userId: authUser.id,
-          status
-        })
+      if (response.ok) {
+        if (socketRef.current) {
+          socketRef.current.emit('user-status', {
+            userId: authUser.id,
+            status
+          })
+        }
+        setCurrentUserStatus(status)
+      } else {
+        console.error('Failed to update status:', response.status)
       }
-      
-      setCurrentUserStatus(status)
     } catch (error) {
       console.error('Error updating status:', error)
     }
+  }
+
+  const handleStatusChange = async (status: 'ONLINE' | 'OFFLINE' | 'AWAY') => {
+    await updateUserStatusOnServer(status)
   }
 
   const handleLogout = async () => {
@@ -232,6 +244,15 @@ export default function ChatPage() {
     }
   }
 
+  const getStatusText = (status: 'ONLINE' | 'OFFLINE' | 'AWAY') => {
+    switch(status) {
+      case 'ONLINE': return 'متصل'
+      case 'AWAY': return 'بعيد'
+      case 'OFFLINE': return 'غير متصل'
+      default: return status
+    }
+  }
+
   if (loading || isLoading) {
     return (
       <div className="d-flex justify-content-center align-items-center vh-100 dark-theme">
@@ -252,24 +273,27 @@ export default function ChatPage() {
       <div className="row h-100">
         <div className="col-12">
           <div className="p-3">
+            {/* Header */}
             <div className="d-flex justify-content-between align-items-center mb-3 shadow-sm p-3 bg-body-tertiary rounded"
               style={{backdropFilter:'blur(27px)'}}
             >
               <div className="d-flex align-items-center">
                 <h4 className="mb-0 fw-bold dark-text me-3">SURAACHAT</h4>
-                
+                <span className="badge bg-primary">
+                  {getStatusText(currentUserStatus)}
+                </span>
               </div>
               
               <div className="d-flex align-items-center">
                 <select 
                   className="form-select me-2"
-                  onChange={(e) => updateUserStatusOnServer(e.target.value as 'ONLINE' | 'OFFLINE' | 'AWAY')}
+                  onChange={(e) => handleStatusChange(e.target.value as 'ONLINE' | 'OFFLINE' | 'AWAY')}
                   value={currentUserStatus}
                   style={{width: 'auto'}}
                 >
-                  <option value="ONLINE">🟢 </option>
-                  <option value="AWAY">🟡 </option>
-                  <option value="OFFLINE">⚫  </option>
+                  <option value="ONLINE">🟢 متصل</option>
+                  <option value="AWAY">🟡 بعيد</option>
+                  <option value="OFFLINE">⚫ غير متصل</option>
                 </select>
                 
                 <button 
@@ -277,11 +301,12 @@ export default function ChatPage() {
                   onClick={handleLogout}
                 >
                   <i className="fas fa-sign-out-alt me-2"></i>
-                
+                  تسجيل الخروج
                 </button>
               </div>
             </div>
             
+            {/* Users List */}
             <div className="list-group">
               {users.length === 0 ? (
                 <div className="text-center p-5">
@@ -297,20 +322,23 @@ export default function ChatPage() {
                       backgroundColor: "#6586f432",
                       backdropFilter: 'blur(75px)',
                       border: "None",
-                      transition: 'background-color 0.3s ease'
+                      transition: 'all 0.3s ease',
+                      cursor: 'pointer'
                     }}
                     onMouseEnter={(e) => {
                       e.currentTarget.style.backgroundColor = '#4190ff75'
+                      e.currentTarget.style.transform = 'translateY(-2px)'
                     }}
                     onMouseLeave={(e) => {
                       e.currentTarget.style.backgroundColor = '#6586f432'
+                      e.currentTarget.style.transform = 'translateY(0)'
                     }}
                   >
                     <div className="d-flex align-items-center justify-content-between">
                       <div className="d-flex align-items-center">
                         <div className="mx-3 position-relative">
                           <i className="fas fa-user fa-2x text-primary"></i>
-                          {onlineUsers.has(userItem.id) && (
+                          {(onlineUsers.has(userItem.id) || userItem.status === 'ONLINE') && (
                             <span className="position-absolute top-0 start-100 translate-middle p-1 bg-success border border-light rounded-circle">
                               <span className="visually-hidden">متصل</span>
                             </span>
@@ -318,7 +346,7 @@ export default function ChatPage() {
                         </div>
                         <div>
                           <h6 className="dark-text mb-1">{userItem.name}</h6>
-                          <small className="dark-text-muted">{userItem.status}</small>
+                          <small className="dark-text-muted">{getStatusText(userItem.status)}</small>
                         </div>
                       </div>
                       
