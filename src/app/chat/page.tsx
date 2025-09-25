@@ -11,6 +11,17 @@ interface ChatUser {
   status: 'ONLINE' | 'OFFLINE' | 'AWAY'
   lastSeen?: string
   avatar?: string
+  unreadCount?: number // إضافة عدد الرسائل غير المقروءة
+}
+
+interface Message {
+  id: string
+  senderId: string
+  receiverId: string
+  content: string
+  timestamp: string
+  read: boolean
+  chatId?: string
 }
 
 export default function ChatPage() {
@@ -20,6 +31,8 @@ export default function ChatPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set())
   const [currentUserStatus, setCurrentUserStatus] = useState<'ONLINE' | 'OFFLINE' | 'AWAY'>('ONLINE')
+  const [unreadMessages, setUnreadMessages] = useState<Map<string, number>>(new Map()) // Map<userId, unreadCount>
+  const [notifications, setNotifications] = useState<Message[]>([])
   const socketRef = useRef<any>(null)
   
   // دالة لجلب المستخدمين من API الصحيح
@@ -48,7 +61,8 @@ export default function ChatPage() {
             email: u.email,
             status: u.status || 'OFFLINE',
             lastSeen: u.lastSeen,
-            avatar: u.avatar
+            avatar: u.avatar,
+            unreadCount: 0
           }))
 
         setUsers(formattedUsers)
@@ -63,20 +77,52 @@ export default function ChatPage() {
         setOnlineUsers(onlineSet)
       } else {
         console.error('Failed to fetch users:', response.status)
-        // استخدام بيانات وهمية للاختبار إذا فشل الاتصال
-        
       }
     } catch (error) {
       console.error('Error fetching users:', error)
-      // استخدام بيانات وهمية في حالة الخطأ
-      
     } finally {
       setIsLoading(false)
     }
   }
 
-  // بيانات وهمية للاختبار
-  
+  // دالة لجلب الرسائل غير المقروءة
+  const fetchUnreadMessages = async () => {
+    if (!authUser) return
+    
+    try {
+      const token = localStorage.getItem('token')
+      const response = await fetch('/api/messages/unread', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      
+      if (response.ok) {
+        const unreadMessagesData = await response.json()
+        
+        // تحديث خريطة الرسائل غير المقروءة
+        const newUnreadMap = new Map<string, number>()
+        unreadMessagesData.forEach((msg: Message) => {
+          const senderId = msg.senderId
+          const currentCount = newUnreadMap.get(senderId) || 0
+          newUnreadMap.set(senderId, currentCount + 1)
+        })
+        
+        setUnreadMessages(newUnreadMap)
+        
+        // تحديث عدد الرسائل غير المقروءة لكل مستخدم
+        setUsers(prevUsers => 
+          prevUsers.map(user => ({
+            ...user,
+            unreadCount: newUnreadMap.get(user.id) || 0
+          }))
+        )
+      }
+    } catch (error) {
+      console.error('Error fetching unread messages:', error)
+    }
+  }
 
   useEffect(() => {
     if (!loading && !authUser) {
@@ -87,6 +133,7 @@ export default function ChatPage() {
     if (authUser) {
       initializeSocket()
       fetchUsers()
+      fetchUnreadMessages() // جلب الرسائل غير المقروءة
       // تحديث حالة المستخدم إلى ONLINE عند الدخول
       updateUserStatusOnServer('ONLINE')
     }
@@ -136,6 +183,51 @@ export default function ChatPage() {
         updateUserStatus(data.userId, data.status)
       })
 
+      // استقبال رسالة جديدة
+      socketRef.current.on('new-message', (message: Message) => {
+        if (message.receiverId === authUser.id) {
+          // زيادة عدد الرسائل غير المقروءة للمرسل
+          setUnreadMessages(prev => {
+            const newMap = new Map(prev)
+            const currentCount = newMap.get(message.senderId) || 0
+            newMap.set(message.senderId, currentCount + 1)
+            return newMap
+          })
+
+          // تحديث واجهة المستخدمين
+          setUsers(prevUsers => 
+            prevUsers.map(user => 
+              user.id === message.senderId 
+                ? { ...user, unreadCount: (user.unreadCount || 0) + 1 }
+                : user
+            )
+          )
+
+          // إظهار إشعار للمستخدم
+          showNotification(message)
+        }
+      })
+
+      // حدث عندما يتم قراءة الرسائل
+      socketRef.current.on('messages-read', (data: { senderId: string, readerId: string }) => {
+        if (data.readerId === authUser.id) {
+          // إعادة تعيين عدد الرسائل غير المقروءة للمرسل
+          setUnreadMessages(prev => {
+            const newMap = new Map(prev)
+            newMap.set(data.senderId, 0)
+            return newMap
+          })
+
+          setUsers(prevUsers => 
+            prevUsers.map(user => 
+              user.id === data.senderId 
+                ? { ...user, unreadCount: 0 }
+                : user
+            )
+          )
+        }
+      })
+
       socketRef.current.on('error', (error: any) => {
         console.error('Socket error:', error)
       })
@@ -149,6 +241,53 @@ export default function ChatPage() {
     }
   }
 
+  // دالة لإظهار الإشعارات
+  const showNotification = (message: Message) => {
+    // إضافة الرسالة إلى قائمة الإشعارات
+    setNotifications(prev => [...prev, message])
+    
+    // إشعار المتصفح (إذا كان مدعومًا)
+    if ('Notification' in window && Notification.permission === 'granted') {
+      new Notification('رسالة جديدة من ' + getSenderName(message.senderId), {
+        body: message.content.length > 50 
+          ? message.content.substring(0, 50) + '...' 
+          : message.content,
+        icon: '/favicon.ico',
+        tag: 'chat-message'
+      })
+    }
+    
+    // إشعار صوتي (اختياري)
+    playNotificationSound()
+    
+    // إزالة الإشعار تلقائيًا بعد 5 ثواني
+    setTimeout(() => {
+      setNotifications(prev => prev.filter(notif => notif.id !== message.id))
+    }, 5000)
+  }
+
+  // دالة لتشغيل صوت الإشعار
+  const playNotificationSound = () => {
+    const audio = new Audio('/notification.mp3') // تأكد من وجود الملف
+    audio.play().catch(() => console.log('تعذر تشغيل صوت الإشعار'))
+  }
+
+  // طلب إذن الإشعارات
+  const requestNotificationPermission = () => {
+    if ('Notification' in window) {
+      Notification.requestPermission().then(permission => {
+        if (permission === 'granted') {
+          console.log('تم منح إذن الإشعارات')
+        }
+      })
+    }
+  }
+
+  const getSenderName = (senderId: string) => {
+    const user = users.find(u => u.id === senderId)
+    return user?.name || 'مستخدم'
+  }
+
   const updateUserStatus = (userId: string, status: 'ONLINE' | 'OFFLINE' | 'AWAY') => {
     setUsers(prevUsers => 
       prevUsers.map(u => 
@@ -160,6 +299,10 @@ export default function ChatPage() {
   const startPrivateChat = async (receiverId: string) => {
     try {
       const token = localStorage.getItem('token')
+      
+      // وضع علامة على الرسائل كمقروءة قبل فتح المحادثة
+      await markMessagesAsRead(receiverId)
+
       const response = await fetch('/api/chats', {
         method: 'POST',
         headers: {
@@ -176,12 +319,53 @@ export default function ChatPage() {
         const newChat = await response.json()
         router.push(`/?chatId=${newChat.id}`)
       } else {
-        // إذا فشل إنشاء المحادثة، انتقل إلى صفحة محادثة افتراضية
         router.push(`/chat/${receiverId}`)
       }
     } catch (error) {
       console.error('Error starting private chat:', error)
       router.push(`/chat/${receiverId}`)
+    }
+  }
+
+  // دالة لوضع علامة على الرسائل كمقروءة
+  const markMessagesAsRead = async (senderId: string) => {
+    try {
+      const token = localStorage.getItem('token')
+      const response = await fetch('/api/messages', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ senderId })
+      })
+
+      if (response.ok) {
+        // تحديث الحالة المحلية
+        setUnreadMessages(prev => {
+          const newMap = new Map(prev)
+          newMap.set(senderId, 0)
+          return newMap
+        })
+
+        setUsers(prevUsers => 
+          prevUsers.map(user => 
+            user.id === senderId 
+              ? { ...user, unreadCount: 0 }
+              : user
+          )
+        )
+
+        // إرسال حدث عبر Socket
+        if (socketRef.current) {
+          socketRef.current.emit('mark-messages-read', {
+            senderId,
+            readerId: authUser?.id
+          })
+        }
+      }
+    } catch (error) {
+      console.error('Error marking messages as read:', error)
     }
   }
 
@@ -236,15 +420,26 @@ export default function ChatPage() {
     const isOnline = onlineUsers.has(userItem.id) || userItem.status === 'ONLINE'
     
     if (isOnline) {
-      return <span className="badge ">🟢</span>
+      return <span className="badge">🟢</span>
     } else if (userItem.status === 'AWAY') {
-      return <span className="badge ">🟡</span>
+      return <span className="badge">🟡</span>
     } else {
-      return <span className="badge ">⚫</span>
+      return <span className="badge">⚫</span>
     }
-        }
+  }
 
-  
+  // إظهار عدد الرسائل غير المقروءة
+  const getUnreadBadge = (userItem: ChatUser) => {
+    const unreadCount = userItem.unreadCount || 0
+    if (unreadCount > 0) {
+      return (
+        <span className="badge bg-danger rounded-pill ms-2">
+          {unreadCount > 99 ? '99+' : unreadCount}
+        </span>
+      )
+    }
+    return null
+  }
 
   if (loading || isLoading) {
     return (
@@ -271,10 +466,14 @@ export default function ChatPage() {
               style={{backdropFilter:'blur(27px)'}}
             >
               <div className="d-flex align-items-center">
-                <h4 className="mb-0 fw-bold dark-text ">SURAACHAT</h4>
-                <span className="badge bg-primary">
-                  
-                </span>
+                <h4 className="mb-0 fw-bold dark-text">SURAACHAT</h4>
+                <button 
+                  className="btn btn-outline-primary btn-sm ms-3"
+                  onClick={requestNotificationPermission}
+                  titleتفعيل الإشعارات"
+                >
+                  <i className="fas fa-bell"></i>
+                </button>
               </div>
               
               <div className="d-flex align-items-center">
@@ -294,9 +493,25 @@ export default function ChatPage() {
                   onClick={handleLogout}
                 >
                   <i className="fas fa-sign-out-alt me-2"></i>
-                   
+                  تسجيل الخروج
                 </button>
               </div>
+            </div>
+            
+            {/* منطقة الإشعارات */}
+            <div className="position-fixed top-0 end-0 p-3" style={{zIndex: 1050}}>
+              {notifications.map(notification => (
+                <div key={notification.id} className="alert alert-info alert-dismissible fade show mb-2 shadow">
+                  <strong>رسالة جديدة من {getSenderName(notification.senderId)}</strong>
+                  <br />
+                  <small>{notification.content}</small>
+                  <button 
+                    type="button" 
+                    className="btn-close" 
+                    onClick={() => setNotifications(prev => prev.filter(n => n.id !== notification.id))}
+                  ></button>
+                </div>
+              ))}
             </div>
             
             {/* Users List */}
@@ -338,7 +553,10 @@ export default function ChatPage() {
                           )}
                         </div>
                         <div>
-                          <h6 className="dark-text mb-1">{userItem.name}</h6>
+                          <h6 className="dark-text mb-1 d-flex align-items-center">
+                            {userItem.name}
+                            {getUnreadBadge(userItem)}
+                          </h6>
                           <small className="dark-text-muted">{userItem.status}</small>
                         </div>
                       </div>
