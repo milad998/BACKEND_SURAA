@@ -133,6 +133,7 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const [isPolling, setIsPolling] = useState(true)
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected'>('connected')
+  const [showScrollButton, setShowScrollButton] = useState(false)
 
   // جلب الرسائل من API
   const fetchMessages = useCallback(async () => {
@@ -175,6 +176,24 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
   useEffect(() => {
     scrollToBottom()
   }, [messages])
+
+  // مراقبة التمرير لإظهار/إخفاء زر الانتقال
+  const handleScroll = useCallback(() => {
+    if (messagesContainerRef.current) {
+      const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current
+      const isNearBottom = scrollHeight - scrollTop - clientHeight < 100
+      setShowScrollButton(!isNearBottom)
+    }
+  }, [])
+
+  // إضافة مستمع حدث التمرير
+  useEffect(() => {
+    const container = messagesContainerRef.current
+    if (container) {
+      container.addEventListener('scroll', handleScroll)
+      return () => container.removeEventListener('scroll', handleScroll)
+    }
+  }, [handleScroll])
 
   // تحديد الرسائل كمقروءة
   const markMessagesAsRead = useCallback(async () => {
@@ -253,7 +272,11 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
   // التمرير إلى أحدث رسالة
   const scrollToBottom = useCallback(() => {
     if (messagesContainerRef.current) {
-      messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight
+      messagesContainerRef.current.scrollTo({
+        top: messagesContainerRef.current.scrollHeight,
+        behavior: 'smooth'
+      })
+      setShowScrollButton(false)
     }
   }, [])
 
@@ -313,7 +336,7 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
   return (
     <div className="d-flex flex-column h-100 bg-light">
       {/* الهيدر الثابت في الأعلى */}
-      <div className="fixed-top p-3 border-bottom bg-white shadow-sm" style={{flexShrink: 0}}>
+      <div className="fixed-top p-3 border-bottom bg-white shadow-sm" style={{flexShrink: 0, zIndex: 1000}}>
         <div className="d-flex align-items-center">
           <button 
             className="btn btn-light btn-sm me-3 d-md-none"
@@ -372,10 +395,10 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
       {/* منطقة الرسائل - قابلة للتمرير */}
       <div 
         ref={messagesContainerRef}
-        className="flex-grow-1  overflow-auto"
-        style={{minHeight: 0,marginBottom:100,marginTop:30 }}
+        className="flex-grow-1 overflow-auto position-relative"
+        style={{minHeight: 0, marginBottom: 100, marginTop: 80}}
       >
-        <div className="d-flex flex-column">
+        <div className="d-flex flex-column p-3">
           {messages.length === 0 ? (
             <div className="text-center text-muted my-5 mb-5">
               <i className="fas fa-comments fa-3x mb-3 opacity-50"></i>
@@ -403,21 +426,35 @@ export default function ChatWindow({ chat, currentUser, onBack }: ChatWindowProp
             })
           )}
           <div ref={messagesEndRef} />
-          <button
-  className="btn btn-primary mb-5"
-  style={{
-    position: 'fixed',
-    bottom: '80px',  // المسافة من الأسفل (تعدل حسب ارتفاع الفوتر)
-    left: '4%',
-    transform: 'translateX(-50%)'
-  }}
-  onClick={()=> scrollToBottom}
- >^</button>
         </div>
+
+        {/* زر الانتقال لآخر رسالة */}
+        {showScrollButton && (
+          <button
+            className="btn btn-primary shadow-sm"
+            onClick={scrollToBottom}
+            style={{
+              position: 'fixed',
+              bottom: '120px',
+              right: '20px',
+              borderRadius: '50%',
+              width: '45px',
+              height: '45px',
+              zIndex: 999,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+            aria-label="الانتقال لآخر رسالة"
+            title="الانتقال لآخر رسالة"
+          >
+            <i className="fas fa-chevron-down"></i>
+          </button>
+        )}
       </div>
 
       {/* الفوتر الثابت في الأسفل */}
-      <div className="fixed-bottom p-3 border-top bg-white " style={{marginTop:"40px"}} >
+      <div className="fixed-bottom p-3 border-top bg-white" style={{zIndex: 1000}}>
         <div className="input-group">
           <button className="btn btn-light border" type="button" aria-label="إرفاق ملف">
             <i className="fas fa-paperclip"></i>
