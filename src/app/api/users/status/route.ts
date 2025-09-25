@@ -1,5 +1,8 @@
 // src/app/api/users/status/route.ts
 import { NextRequest, NextResponse } from 'next/server'
+import { PrismaClient } from '@prisma/client'
+
+const prisma = new PrismaClient()
 
 export async function PUT(request: NextRequest) {
   try {
@@ -9,24 +12,59 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ message: 'Unauthorized' }, { status: 401 })
     }
 
+    // التحقق من صحة التوكن والحصول على بيانات المستخدم
+    const user = await prisma.user.findFirst({
+      where: {
+        token: token // أو أي حقل تخزن فيه التوكن
+      },
+      select: {
+        id: true,
+        email: true
+      }
+    })
+
+    if (!user) {
+      return NextResponse.json({ message: 'Invalid token' }, { status: 401 })
+    }
+
     const { status } = await request.json()
 
     if (!status || !['ONLINE', 'OFFLINE', 'AWAY'].includes(status)) {
       return NextResponse.json({ message: 'Invalid status' }, { status: 400 })
     }
 
-    // مؤقتاً: إرجاع نجاح بدون تحديث قاعدة البيانات
-    console.log(`User status updated to: ${status}`)
+    // تحديث حالة المستخدم في قاعدة البيانات
+    const updatedUser = await prisma.user.update({
+      where: {
+        id: user.id
+      },
+      data: {
+        status: status,
+        lastSeen: status === 'OFFLINE' ? new Date() : null, // تحديث وقت آخر ظهور إذا كان أوفلاين
+        statusUpdatedAt: new Date() // تحديث وقت آخر تغيير للحالة
+      },
+      select: {
+        id: true,
+        email: true,
+        status: true,
+        lastSeen: true,
+        statusUpdatedAt: true
+      }
+    })
+
+    console.log(`User ${user.email} status updated to: ${status}`)
     
     return NextResponse.json({ 
       success: true, 
       message: 'Status updated successfully',
-      status 
+      user: updatedUser
     })
 
   } catch (error) {
     console.error('Error updating user status:', error)
     return NextResponse.json({ message: 'Internal server error' }, { status: 500 })
+  } finally {
+    await prisma.$disconnect()
   }
 }
 
