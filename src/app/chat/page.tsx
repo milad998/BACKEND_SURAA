@@ -470,7 +470,7 @@ export default function ChatPage() {
                 <button 
                   className="btn btn-outline-primary btn-sm ms-3"
                   onClick={requestNotificationPermission}
-                  titleتفعيل الإشعارات"
+                  
                 >
                   <i className="fas fa-bell"></i>
                 </button>
