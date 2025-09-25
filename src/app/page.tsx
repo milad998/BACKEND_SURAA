@@ -118,7 +118,7 @@ function HomeContent() {
   }
 
   const handleBack = () => {
-    router.push('/chat')
+    router.push('/')
     localStorage.removeItem('currentChatId')
   }
 
@@ -140,6 +140,19 @@ function HomeContent() {
   }
 
   if (!user) return null
+
+  if (chatId && chatLoading) {
+    return (
+      <div className="d-flex justify-content-center align-items-center vh-100 dark-theme">
+        <div className="text-center">
+          <div className="spinner-border text-primary mb-3" style={{width: '3rem', height: '3rem'}} role="status">
+            <span className="visually-hidden">جاري التحميل...</span>
+          </div>
+          <p className="dark-text-muted">جاري تحميل المحادثة...</p>
+        </div>
+      </div>
+    )
+  }
 
 
   if (currentChat) {

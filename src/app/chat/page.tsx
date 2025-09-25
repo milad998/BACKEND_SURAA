@@ -191,15 +191,15 @@ export default function ChatPage() {
 
       if (response.ok) {
         const newChat = await response.json()
-        router.push(`/chat/${newChat.id}`)
+        router.push(`/?chatid=${newChat.id}`)
       } else {
         // إذا فشل إنشاء المحادثة، انتقل إلى صفحة محادثة افتراضية
-        router.push(`/chat/${receiverId}`)
+        router.push(`/?chatid=${receiverId}`)
       }
     } catch (error) {
       console.error('Error starting private chat:', error)
       // في حالة الخطأ، انتقل إلى صفحة محادثة افتراضية
-      router.push(`/chat/${receiverId}`)
+      router.push(`/chat${receiverId}`)
     }
   }
 
