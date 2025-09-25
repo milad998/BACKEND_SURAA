@@ -30,7 +30,8 @@ function HomeContent() {
   const [chatLoading, setChatLoading] = useState(false)
   const [chats, setChats] = useState<Chat[]>([])
 
-  const chatId = searchParams.get('chatId')
+  // Fix: Add null check for searchParams
+  const chatId = searchParams?.get('chatId') || null
 
   useEffect(() => {
     if (!loading && !user) {
@@ -141,27 +142,14 @@ function HomeContent() {
 
   if (!user) return null
 
-  if (chatId && chatLoading) {
-    return (
-      <div className="d-flex justify-content-center align-items-center vh-100 dark-theme">
-        <div className="text-center">
-          <div className="spinner-border text-primary mb-3" style={{width: '3rem', height: '3rem'}} role="status">
-            <span className="visually-hidden">جاري التحميل...</span>
-          </div>
-          <p className="dark-text-muted">جاري تحميل المحادثة...</p>
-        </div>
-      </div>
-    )
-  }
-
 
   if (currentChat) {
     return (
-            <ChatWindow 
-              chat={currentChat}
-              currentUser={user}
-              onBack={handleBack}
-            />
+      <ChatWindow 
+        chat={currentChat}
+        currentUser={user}
+        onBack={handleBack}
+      />
     )
   }
 
@@ -183,4 +171,4 @@ export default function Home() {
       <HomeContent />
     </Suspense>
   )
-    }
+}
