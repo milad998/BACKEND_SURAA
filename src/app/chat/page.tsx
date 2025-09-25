@@ -39,7 +39,11 @@ export default function ChatPage() {
         socketRef.current.disconnect()
       }
     }
-  }, [authUser, loading, router,currentUserStatus])
+  }, [authUser, loading, router])
+
+  useEffect(()=>{
+    console.log("change")
+  },[currentUserStatus])
 
   const initializeSocket = async () => {
     if (!authUser || socketRef.current) return
