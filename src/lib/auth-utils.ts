@@ -48,7 +48,7 @@ export async function getUserFromToken(token: string) {
         name: true, 
         status: true,
         lastSeen: true,
-        statusUpdatedAt: true
+        
       }
     })
 
