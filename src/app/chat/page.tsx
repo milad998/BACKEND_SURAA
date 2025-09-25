@@ -236,11 +236,11 @@ export default function ChatPage() {
     const isOnline = onlineUsers.has(userItem.id) || userItem.status === 'ONLINE'
     
     if (isOnline) {
-      return <span className="badge bg-success">🟢 متصل</span>
+      return <span className="badge bg-success">🟢</span>
     } else if (userItem.status === 'AWAY') {
-      return <span className="badge bg-warning">🟡 بعيد</span>
+      return <span className="badge bg-warning">🟡</span>
     } else {
-      return <span className="badge bg-secondary">⚫ غير متصل</span>
+      return <span className="badge bg-secondary">⚫</span>
     }
   }
 
@@ -291,9 +291,9 @@ export default function ChatPage() {
                   value={currentUserStatus}
                   style={{width: 'auto'}}
                 >
-                  <option value="ONLINE">🟢 متصل</option>
-                  <option value="AWAY">🟡 بعيد</option>
-                  <option value="OFFLINE">⚫ غير متصل</option>
+                  <option value="ONLINE">🟢</option>
+                  <option value="AWAY">🟡</option>
+                  <option value="OFFLINE">⚫</option>
                 </select>
                 
                 <button 
@@ -301,7 +301,7 @@ export default function ChatPage() {
                   onClick={handleLogout}
                 >
                   <i className="fas fa-sign-out-alt me-2"></i>
-                  تسجيل الخروج
+                   
                 </button>
               </div>
             </div>
