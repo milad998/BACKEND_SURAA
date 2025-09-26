@@ -4,87 +4,184 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql" // أو mysql
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
 model User {
-  id            String    @id @default(cuid())
-  email         String    @unique
-  password      String
-  name          String
-  avatar        String?
-  status        UserStatus @default(ONLINE)
-  lastSeen      DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  
+  id         String     @id @default(cuid())
+  email      String     @unique
+  password   String
+  name       String
+  username   String?    @unique
+  avatar     String?
+  bio        String?
+  status     UserStatus @default(ONLINE)
+  lastSeen   DateTime?
+  isVerified Boolean    @default(false)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
   // العلاقات
   sentMessages     Message[]  @relation("MessageSender")
   receivedMessages Message[]  @relation("MessageReceiver")
   chats            ChatUser[]
-  
+
+  // نظام الأصدقاء
+  sentFriendRequests     FriendRequest[] @relation("FriendRequestSender")
+  receivedFriendRequests FriendRequest[] @relation("FriendRequestReceiver")
+  friendshipsAsUser1     Friendship[]    @relation("FriendshipUser1")
+  friendshipsAsUser2     Friendship[]    @relation("FriendshipUser2")
+
+  // الإشعارات
+  sentNotifications     Notification[] @relation("NotificationSender")
+  receivedNotifications Notification[] @relation("NotificationReceiver")
+
+  // إعدادات المستخدم
+  settings UserSettings?
+
   @@map("users")
+}
+
+model Friendship {
+  id        String       @id @default(cuid())
+  user1Id   String
+  user2Id   String
+  status    FriendStatus @default(ACCEPTED)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  // العلاقات
+  user1 User @relation("FriendshipUser1", fields: [user1Id], references: [id], onDelete: Cascade)
+  user2 User @relation("FriendshipUser2", fields: [user2Id], references: [id], onDelete: Cascade)
+
+  @@unique([user1Id, user2Id])
+  @@map("friendships")
+}
+
+model FriendRequest {
+  id         String        @id @default(cuid())
+  senderId   String
+  receiverId String
+  status     RequestStatus @default(PENDING)
+  message    String?
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  // العلاقات
+  sender   User @relation("FriendRequestSender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver User @relation("FriendRequestReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@unique([senderId, receiverId])
+  @@map("friend_requests")
+}
+
+model Notification {
+  id         String           @id @default(cuid())
+  type       NotificationType
+  title      String
+  message    String
+  data       Json? // بيانات إضافية
+  isRead     Boolean          @default(false)
+  senderId   String?
+  receiverId String
+  createdAt  DateTime         @default(now())
+
+  // العلاقات
+  sender   User? @relation("NotificationSender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver User  @relation("NotificationReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+model UserSettings {
+  id             String      @id @default(cuid())
+  userId         String      @unique
+  theme          String      @default("light")
+  language       String      @default("ar")
+  notifications  Boolean     @default(true)
+  sound          Boolean     @default(true)
+  twoFactorAuth  Boolean     @default(false)
+  privacyProfile PrivacyType @default(PUBLIC)
+  lastUpdated    DateTime    @default(now())
+
+  // العلاقات
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_settings")
 }
 
 model Chat {
   id          String   @id @default(cuid())
   name        String?
+  description String?
   type        ChatType @default(PRIVATE)
   background  String?
+  isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-  
+
   // العلاقات
   users    ChatUser[]
   messages Message[]
-  
+
   @@map("chats")
 }
 
 model ChatUser {
-  id        String   @id @default(cuid())
-  userId    String
-  chatId    String
-  joinedAt  DateTime @default(now())
-  
+  id       String    @id @default(cuid())
+  userId   String
+  chatId   String
+  role     ChatRole  @default(MEMBER)
+  joinedAt DateTime  @default(now())
+  lastRead DateTime?
+
   // العلاقات
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
-  
+
   @@unique([userId, chatId])
   @@map("chat_users")
 }
 
 model Message {
-  id           String      @id @default(cuid())
-  content      String
-  type         MessageType @default(TEXT)
-  encrypted    Boolean     @default(true)
-  isRead       Boolean     @default(false)
-  senderId     String
-  receiverId   String?
-  chatId       String
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
-  
+  id         String      @id @default(cuid())
+  content    String
+  type       MessageType @default(TEXT)
+  encrypted  Boolean     @default(true)
+  isRead     Boolean     @default(false)
+  senderId   String
+  receiverId String?
+  chatId     String
+  replyToId  String?
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
   // العلاقات
-  sender   User   @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
-  receiver User?  @relation("MessageReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
-  chat     Chat   @relation(fields: [chatId], references: [id], onDelete: Cascade)
-  
+  sender   User  @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver User? @relation("MessageReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+  chat     Chat  @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+  // علاقة الردود - التصحيح هنا
+  replyTo Message?  @relation("MessageReplies", fields: [replyToId], references: [id])
+  replies Message[] @relation("MessageReplies")
+
   @@map("messages")
 }
 
+// Enums
 enum UserStatus {
   ONLINE
   OFFLINE
   AWAY
+  BUSY
+  DO_NOT_DISTURB
 }
 
 enum ChatType {
   PRIVATE
   GROUP
+  CHANNEL
 }
 
 enum MessageType {
@@ -93,4 +190,40 @@ enum MessageType {
   VIDEO
   AUDIO
   VOICE
+  FILE
+  SYSTEM
+}
+
+enum FriendStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  BLOCKED
+}
+
+enum RequestStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  CANCELLED
+}
+
+enum NotificationType {
+  FRIEND_REQUEST
+  MESSAGE
+  SYSTEM
+  GROUP_INVITE
+  MENTION
+}
+
+enum PrivacyType {
+  PUBLIC
+  PRIVATE
+  FRIENDS_ONLY
+}
+
+enum ChatRole {
+  MEMBER
+  ADMIN
+  OWNER
 }
