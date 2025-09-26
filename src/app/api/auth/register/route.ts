@@ -62,36 +62,3 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// GET - جلب جميع المستخدمين
-export async function GET(request: NextRequest) {
-  try {
-    const users = await prisma.user.findMany({
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-      orderBy: {
-        createdAt: 'desc'
-      }
-    })
-
-    return NextResponse.json(
-      { 
-        message: 'تم جلب المستخدمين بنجاح',
-        users,
-        count: users.length
-      },
-      { status: 200 }
-    )
-
-  } catch (error) {
-    console.error('Get users error:', error)
-    return NextResponse.json(
-      { error: 'حدث خطأ أثناء جلب المستخدمين' },
-      { status: 500 }
-    )
-  }
-      }
