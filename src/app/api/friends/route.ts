@@ -1,3 +1,7 @@
+import { prisma } from "@/lib/prisma"
+import { getServerSession } from "next-auth"
+import { NextRequest, NextResponse } from "next/server"
+
 // src/app/api/friends/route.ts
 export async function GET(request: NextRequest) {
   try {
