@@ -1,4 +1,5 @@
 // src/lib/auth-utils.ts
+import { NextRequest } from 'next/server'
 import { prisma } from './prisma'
 
 export interface DecodedToken {
@@ -67,7 +68,16 @@ export function generateToken(userId: string): string {
   }
   return Buffer.from(JSON.stringify(payload)).toString('base64')
 }
+// lib/auth-utils.ts - إضافة هذه الدالة
+export function authenticateRequest(request: NextRequest): { userId: string } | null {
+  const authHeader = request.headers.get('authorization')
+  if (!authHeader?.startsWith('Bearer ')) {
+    return null
+  }
 
+  const token = authHeader.split(' ')[1]
+  return verifyToken(token)
+}
 // دالة مساعدة للتحقق من صلاحية التوكن
 export function isTokenValid(token: string): boolean {
   return verifyToken(token) !== null

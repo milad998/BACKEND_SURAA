@@ -1,19 +1,30 @@
 // src/app/api/friends/requests/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { getServerSession } from 'next-auth'
+import { verifyToken } from '@/lib/auth-utils'
 
 export async function POST(request: NextRequest) {
   try {
-    // التحقق من المستخدم المسجل دخوله
-    const session = await getServerSession()
-    if (!session?.user?.id) {
+    // التحقق من التوكن
+    const authHeader = request.headers.get('authorization')
+    if (!authHeader?.startsWith('Bearer ')) {
       return NextResponse.json(
-        { error: 'يجب تسجيل الدخول أولاً' },
+        { error: 'مطلوب توكن مصادقة' },
         { status: 401 }
       )
     }
 
+    const token = authHeader.split(' ')[1]
+    const decoded = verifyToken(token)
+    
+    if (!decoded) {
+      return NextResponse.json(
+        { error: 'توكن غير صالح أو منتهي الصلاحية' },
+        { status: 401 }
+      )
+    }
+
+    const userId = decoded.userId
     const { receiverId, message } = await request.json()
 
     if (!receiverId) {
@@ -24,7 +35,7 @@ export async function POST(request: NextRequest) {
     }
 
     // التحقق من عدم إرسال طلب إلى النفس
-    if (session.user.id === receiverId) {
+    if (userId === receiverId) {
       return NextResponse.json(
         { error: 'لا يمكن إرسال طلب صداقة إلى نفسك' },
         { status: 400 }
@@ -33,7 +44,8 @@ export async function POST(request: NextRequest) {
 
     // التحقق من وجود المستلم
     const receiver = await prisma.user.findUnique({
-      where: { id: receiverId }
+      where: { id: receiverId },
+      select: { id: true, name: true, username: true }
     })
 
     if (!receiver) {
@@ -47,15 +59,29 @@ export async function POST(request: NextRequest) {
     const existingRequest = await prisma.friendRequest.findFirst({
       where: {
         OR: [
-          { senderId: session.user.id, receiverId },
-          { senderId: receiverId, receiverId: session.user.id }
+          { senderId: userId, receiverId },
+          { senderId: receiverId, receiverId: userId }
         ]
       }
     })
 
     if (existingRequest) {
+      let errorMessage = 'طلب الصداقة موجود مسبقاً'
+      
+      if (existingRequest.status === 'PENDING') {
+        if (existingRequest.senderId === userId) {
+          errorMessage = 'لقد أرسلت طلب صداقة مسبقاً'
+        } else {
+          errorMessage = 'لديك طلب صداقة وارد من هذا المستخدم'
+        }
+      } else if (existingRequest.status === 'ACCEPTED') {
+        errorMessage = 'أنتم أصدقاء بالفعل'
+      } else if (existingRequest.status === 'REJECTED') {
+        errorMessage = 'تم رفض طلب الصداقة مسبقاً'
+      }
+
       return NextResponse.json(
-        { error: 'طلب الصداقة موجود مسبقاً' },
+        { error: errorMessage },
         { status: 400 }
       )
     }
@@ -64,9 +90,10 @@ export async function POST(request: NextRequest) {
     const existingFriendship = await prisma.friendship.findFirst({
       where: {
         OR: [
-          { user1Id: session.user.id, user2Id: receiverId },
-          { user1Id: receiverId, user2Id: session.user.id }
-        ]
+          { user1Id: userId, user2Id: receiverId },
+          { user1Id: receiverId, user2Id: userId }
+        ],
+        status: 'ACCEPTED'
       }
     })
 
@@ -77,12 +104,29 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // التحقق من إذا كان المستخدم محظور
+    const blockedFriendship = await prisma.friendship.findFirst({
+      where: {
+        OR: [
+          { user1Id: userId, user2Id: receiverId, status: 'BLOCKED' },
+          { user1Id: receiverId, user2Id: userId, status: 'BLOCKED' }
+        ]
+      }
+    })
+
+    if (blockedFriendship) {
+      return NextResponse.json(
+        { error: 'لا يمكن إرسال طلب صداقة إلى مستخدم محظور' },
+        { status: 400 }
+      )
+    }
+
     // إنشاء طلب الصداقة
     const friendRequest = await prisma.friendRequest.create({
       data: {
-        senderId: session.user.id,
+        senderId: userId,
         receiverId,
-        message: message || null
+        message: message?.trim() || null
       },
       include: {
         sender: {
@@ -90,7 +134,8 @@ export async function POST(request: NextRequest) {
             id: true,
             name: true,
             username: true,
-            avatar: true
+            avatar: true,
+            status: true
           }
         },
         receiver: {
@@ -98,7 +143,8 @@ export async function POST(request: NextRequest) {
             id: true,
             name: true,
             username: true,
-            avatar: true
+            avatar: true,
+            status: true
           }
         }
       }
@@ -109,12 +155,13 @@ export async function POST(request: NextRequest) {
       data: {
         type: 'FRIEND_REQUEST',
         title: 'طلب صداقة جديد',
-        message: `ارسل لك ${friendRequest.sender.name} طلب صداقة`,
-        senderId: session.user.id,
+        message: `أرسل لك ${friendRequest.sender.name} طلب صداقة`,
+        senderId: userId,
         receiverId: receiverId,
         data: {
           requestId: friendRequest.id,
-          senderName: friendRequest.sender.name
+          senderName: friendRequest.sender.name,
+          senderId: friendRequest.sender.id
         }
       }
     })
@@ -126,8 +173,100 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('Send friend request error:', error)
+    
+    // معالجة أخطاء Prisma المحددة
+    if (error instanceof Error) {
+      if (error.message.includes('Unique constraint')) {
+        return NextResponse.json(
+          { error: 'طلب الصداقة موجود مسبقاً' },
+          { status: 400 }
+        )
+      }
+    }
+    
     return NextResponse.json(
       { error: 'حدث خطأ أثناء إرسال طلب الصداقة' },
+      { status: 500 }
+    )
+  }
+}
+
+// دالة GET لجلب جميع طلبات الصداقة (اختياري)
+export async function GET(request: NextRequest) {
+  try {
+    const authHeader = request.headers.get('authorization')
+    if (!authHeader?.startsWith('Bearer ')) {
+      return NextResponse.json(
+        { error: 'مطلوب توكن مصادقة' },
+        { status: 401 }
+      )
+    }
+
+    const token = authHeader.split(' ')[1]
+    const decoded = verifyToken(token)
+    
+    if (!decoded) {
+      return NextResponse.json(
+        { error: 'توكن غير صالح أو منتهي الصلاحية' },
+        { status: 401 }
+      )
+    }
+
+    const userId = decoded.userId
+
+    const { searchParams } = new URL(request.url)
+    const type = searchParams.get('type') || 'all' // all, sent, received
+
+    let whereCondition = {}
+
+    if (type === 'sent') {
+      whereCondition = { senderId: userId }
+    } else if (type === 'received') {
+      whereCondition = { receiverId: userId }
+    } else {
+      whereCondition = {
+        OR: [
+          { senderId: userId },
+          { receiverId: userId }
+        ]
+      }
+    }
+
+    const requests = await prisma.friendRequest.findMany({
+      where: whereCondition,
+      include: {
+        sender: {
+          select: {
+            id: true,
+            name: true,
+            username: true,
+            avatar: true,
+            status: true
+          }
+        },
+        receiver: {
+          select: {
+            id: true,
+            name: true,
+            username: true,
+            avatar: true,
+            status: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+
+    return NextResponse.json({
+      message: 'تم جلب طلبات الصداقة بنجاح',
+      requests,
+      count: requests.length
+    }, { status: 200 })
+
+  } catch (error) {
+    console.error('Get friend requests error:', error)
+    return NextResponse.json(
+      { error: 'حدث خطأ أثناء جلب طلبات الصداقة' },
       { status: 500 }
     )
   }

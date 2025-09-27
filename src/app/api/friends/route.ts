@@ -1,17 +1,30 @@
-import { prisma } from "@/lib/prisma"
-import { getServerSession } from "next-auth"
-import { NextRequest, NextResponse } from "next/server"
-
 // src/app/api/friends/route.ts
+import { NextRequest, NextResponse } from 'next/server'
+import { prisma } from '@/lib/prisma'
+import { verifyToken } from '@/lib/auth-utils'
+
 export async function GET(request: NextRequest) {
   try {
-    const session = await getServerSession()
-    if (!session?.user?.id) {
+    // التحقق من التوكن من الهيدر
+    const authHeader = request.headers.get('authorization')
+    if (!authHeader?.startsWith('Bearer ')) {
       return NextResponse.json(
-        { error: 'يجب تسجيل الدخول أولاً' },
+        { error: 'مطلوب توكن مصادقة' },
         { status: 401 }
       )
     }
+
+    const token = authHeader.split(' ')[1]
+    const decoded = verifyToken(token)
+    
+    if (!decoded) {
+      return NextResponse.json(
+        { error: 'توكن غير صالح أو منتهي الصلاحية' },
+        { status: 401 }
+      )
+    }
+
+    const userId = decoded.userId
 
     const { searchParams } = new URL(request.url)
     const search = searchParams.get('search') || ''
@@ -20,8 +33,8 @@ export async function GET(request: NextRequest) {
     const friendships = await prisma.friendship.findMany({
       where: {
         OR: [
-          { user1Id: session.user.id },
-          { user2Id: session.user.id }
+          { user1Id: userId },
+          { user2Id: userId }
         ],
         status: 'ACCEPTED'
       },
@@ -53,7 +66,7 @@ export async function GET(request: NextRequest) {
 
     // استخراج معلومات الأصدقاء
     const friends = friendships.map(friendship => {
-      const friend = friendship.user1Id === session.user.id ? friendship.user2 : friendship.user1
+      const friend = friendship.user1Id === userId ? friendship.user2 : friendship.user1
       return {
         ...friend,
         friendshipId: friendship.id,

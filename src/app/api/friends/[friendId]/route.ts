@@ -1,25 +1,54 @@
-// src/app/api/friends/[friendId]/route.ts
+import { prisma } from "@/lib/prisma"
+import { NextRequest, NextResponse } from "next/server"
+import { verifyToken } from "@/lib/auth-utils"
+
 export async function DELETE(
   request: NextRequest,
   { params }: { params: { friendId: string } }
 ) {
   try {
-    const session = await getServerSession()
-    if (!session?.user?.id) {
+    // التحقق من التوكن مباشرة
+    const authHeader = request.headers.get('authorization')
+    if (!authHeader?.startsWith('Bearer ')) {
       return NextResponse.json(
-        { error: 'يجب تسجيل الدخول أولاً' },
+        { error: 'مطلوب توكن مصادقة' },
         { status: 401 }
       )
     }
 
+    const token = authHeader.split(' ')[1]
+    const decoded = verifyToken(token)
+    
+    if (!decoded) {
+      return NextResponse.json(
+        { error: 'توكن غير صالح أو منتهي الصلاحية' },
+        { status: 401 }
+      )
+    }
+
+    const userId = decoded.userId
     const { friendId } = params
 
-    // البحث عن علاقة الصداقة
+    // باقي الكود بنفس الشكل...
+    if (!friendId) {
+      return NextResponse.json(
+        { error: 'معرف الصديق مطلوب' },
+        { status: 400 }
+      )
+    }
+
+    if (userId === friendId) {
+      return NextResponse.json(
+        { error: 'لا يمكن إزالة نفسك' },
+        { status: 400 }
+      )
+    }
+
     const friendship = await prisma.friendship.findFirst({
       where: {
         OR: [
-          { user1Id: session.user.id, user2Id: friendId },
-          { user1Id: friendId, user2Id: session.user.id }
+          { user1Id: userId, user2Id: friendId },
+          { user1Id: friendId, user2Id: userId }
         ]
       }
     })
@@ -31,7 +60,6 @@ export async function DELETE(
       )
     }
 
-    // حذف علاقة الصداقة
     await prisma.friendship.delete({
       where: { id: friendship.id }
     })
