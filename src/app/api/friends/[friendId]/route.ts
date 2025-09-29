@@ -4,9 +4,12 @@ import { verifyToken } from "@/lib/auth-utils"
 
 export async function DELETE(
   request: NextRequest,
-  context: { params: { friendId: string } }
+  { params }: { params: Promise<{ friendId: string }> }
 ) {
   try {
+    // استخراج params باستخدام await
+    const { friendId } = await params
+
     // التحقق من التوكن مباشرة
     const authHeader = request.headers.get('authorization')
     if (!authHeader?.startsWith('Bearer ')) {
@@ -27,7 +30,6 @@ export async function DELETE(
     }
 
     const userId = decoded.userId
-    const { friendId } = context.params
 
     // التحقق من وجود معرف الصديق
     if (!friendId) {
