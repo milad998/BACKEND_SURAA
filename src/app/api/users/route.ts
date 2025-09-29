@@ -10,12 +10,27 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search') || ''
     const skip = (page - 1) * limit
 
-    // بناء query البحث
+    // بناء query البحث - الطريقة الصحيحة لـ Prisma
     const where = search ? {
       OR: [
-        { name: { contains: search, mode: 'insensitive' } },
-        { email: { contains: search, mode: 'insensitive' } },
-        { username: { contains: search, mode: 'insensitive' } }
+        { 
+          name: { 
+            contains: search,
+            mode: 'insensitive' as const // أضف 'as const' لتحديد النوع
+          } 
+        },
+        { 
+          email: { 
+            contains: search,
+            mode: 'insensitive' as const
+          } 
+        },
+        { 
+          username: { 
+            contains: search,
+            mode: 'insensitive' as const
+          } 
+        }
       ]
     } : {}
 
