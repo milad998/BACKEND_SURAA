@@ -4,7 +4,7 @@ import { verifyToken } from "@/lib/auth-utils"
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { friendId: string } }
+  context: { params: { friendId: string } }
 ) {
   try {
     // التحقق من التوكن مباشرة
@@ -27,9 +27,9 @@ export async function DELETE(
     }
 
     const userId = decoded.userId
-    const { friendId } = params
+    const { friendId } = context.params
 
-    // باقي الكود بنفس الشكل...
+    // التحقق من وجود معرف الصديق
     if (!friendId) {
       return NextResponse.json(
         { error: 'معرف الصديق مطلوب' },
@@ -37,6 +37,7 @@ export async function DELETE(
       )
     }
 
+    // منع المستخدم من إزالة نفسه
     if (userId === friendId) {
       return NextResponse.json(
         { error: 'لا يمكن إزالة نفسك' },
@@ -44,6 +45,7 @@ export async function DELETE(
       )
     }
 
+    // البحث عن علاقة الصداقة
     const friendship = await prisma.friendship.findFirst({
       where: {
         OR: [
@@ -60,6 +62,7 @@ export async function DELETE(
       )
     }
 
+    // حذف علاقة الصداقة
     await prisma.friendship.delete({
       where: { id: friendship.id }
     })
