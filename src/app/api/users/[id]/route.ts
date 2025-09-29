@@ -5,10 +5,11 @@ import bcrypt from 'bcryptjs'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params
+    // استخراج params باستخدام await
+    const { id } = await params
 
     const user = await prisma.user.findUnique({
       where: { id },
@@ -64,10 +65,11 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params
+    // استخراج params باستخدام await
+    const { id } = await params
     const { name, username, bio, avatar, password, status } = await request.json()
 
     const existingUser = await prisma.user.findUnique({
@@ -143,10 +145,11 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params
+    // استخراج params باستخدام await
+    const { id } = await params
 
     const existingUser = await prisma.user.findUnique({
       where: { id }
