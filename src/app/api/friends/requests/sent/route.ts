@@ -5,9 +5,12 @@ import { verifyToken } from '@/lib/auth-utils'
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { requestId: string } }
+  { params }: { params: Promise<{ requestId: string }> }
 ) {
   try {
+    // استخراج params باستخدام await
+    const { requestId } = await params
+
     const authHeader = request.headers.get('authorization')
     if (!authHeader?.startsWith('Bearer ')) {
       return NextResponse.json(
@@ -27,7 +30,6 @@ export async function DELETE(
     }
 
     const userId = decoded.userId
-    const { requestId } = params
 
     // البحث عن طلب الصداقة
     const friendRequest = await prisma.friendRequest.findUnique({
