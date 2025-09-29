@@ -1,16 +1,14 @@
-// src/app/api/friends/requests/sent/[requestId]/route.ts
+// src/app/api/friends/requests/sent/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { verifyToken } from '@/lib/auth-utils'
 
+// هذا المسار لا يأخذ params لأنه ثابت (لا يوجد [requestId] في المسار)
 export async function DELETE(
-  request: NextRequest,
-  { params }: { params: Promise<{ requestId: string }> }
+  request: NextRequest
+  // لا يوجد params هنا لأن المسار ثابت
 ) {
   try {
-    // استخراج params باستخدام await
-    const { requestId } = await params
-
     const authHeader = request.headers.get('authorization')
     if (!authHeader?.startsWith('Bearer ')) {
       return NextResponse.json(
@@ -30,6 +28,16 @@ export async function DELETE(
     }
 
     const userId = decoded.userId
+
+    // الحصول على requestId من body بدلاً من params
+    const { requestId } = await request.json()
+
+    if (!requestId) {
+      return NextResponse.json(
+        { error: 'معرف الطلب مطلوب' },
+        { status: 400 }
+      )
+    }
 
     // البحث عن طلب الصداقة
     const friendRequest = await prisma.friendRequest.findUnique({
@@ -64,6 +72,67 @@ export async function DELETE(
     console.error('Cancel friend request error:', error)
     return NextResponse.json(
       { error: 'حدث خطأ أثناء إلغاء طلب الصداقة' },
+      { status: 500 }
+    )
+  }
+}
+
+// أو إذا كان هذا الملف مخصص لشيء آخر، إليك بديل:
+export async function GET(
+  request: NextRequest
+) {
+  try {
+    const authHeader = request.headers.get('authorization')
+    if (!authHeader?.startsWith('Bearer ')) {
+      return NextResponse.json(
+        { error: 'مطلوب توكن مصادقة' },
+        { status: 401 }
+      )
+    }
+
+    const token = authHeader.split(' ')[1]
+    const decoded = verifyToken(token)
+    
+    if (!decoded) {
+      return NextResponse.json(
+        { error: 'توكن غير صالح أو منتهي الصلاحية' },
+        { status: 401 }
+      )
+    }
+
+    const userId = decoded.userId
+
+    // جلب طلبات الصداقة المرسلة
+    const sentRequests = await prisma.friendRequest.findMany({
+      where: {
+        senderId: userId,
+        status: 'PENDING'
+      },
+      include: {
+        receiver: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            avatar: true,
+            status: true
+          }
+        }
+      },
+      orderBy: {
+        createdAt: 'desc'
+      }
+    })
+
+    return NextResponse.json({
+      message: 'تم جلب طلبات الصداقة المرسلة بنجاح',
+      requests: sentRequests
+    }, { status: 200 })
+
+  } catch (error) {
+    console.error('Get sent requests error:', error)
+    return NextResponse.json(
+      { error: 'حدث خطأ أثناء جلب طلبات الصداقة المرسلة' },
       { status: 500 }
     )
   }
