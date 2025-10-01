@@ -30,7 +30,6 @@ export async function POST(
 
     const userId = decoded.userId
 
-    // البحث عن طلب الصداقة
     const friendRequest = await prisma.friendRequest.findUnique({
       where: { id: requestId }
     })
@@ -42,7 +41,6 @@ export async function POST(
       )
     }
 
-    // التحقق من أن المستخدم هو المستقبل للطلب
     if (friendRequest.receiverId !== userId) {
       return NextResponse.json(
         { error: 'غير مصرح لك برفض هذا الطلب' },
@@ -50,7 +48,6 @@ export async function POST(
       )
     }
 
-    // التحقق من حالة الطلب
     if (friendRequest.status !== 'PENDING') {
       return NextResponse.json(
         { error: 'لا يمكن رفض طلب صداقة تمت معالجته مسبقاً' },
@@ -58,15 +55,14 @@ export async function POST(
       )
     }
 
-    // تحديث حالة طلب الصداقة إلى REJECTED
+    // تحديث حالة الطلب إلى مرفوض
     const updatedRequest = await prisma.friendRequest.update({
       where: { id: requestId },
       data: { status: 'REJECTED' }
     })
 
     return NextResponse.json({
-      message: 'تم رفض طلب الصداقة بنجاح',
-      request: updatedRequest
+      message: 'تم رفض طلب الصداقة بنجاح'
     }, { status: 200 })
 
   } catch (error) {
