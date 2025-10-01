@@ -1,16 +1,15 @@
-import { prisma } from "@/lib/prisma"
-import { NextRequest, NextResponse } from "next/server"
-import { verifyToken } from "@/lib/auth-utils"
+// src/app/api/friends/[friendId]/route.ts
+import { NextRequest, NextResponse } from 'next/server'
+import { prisma } from '@/lib/prisma'
+import { verifyToken } from '@/lib/auth-utils'
 
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ friendId: string }> }
 ) {
   try {
-    // استخراج params باستخدام await
     const { friendId } = await params
 
-    // التحقق من التوكن مباشرة
     const authHeader = request.headers.get('authorization')
     if (!authHeader?.startsWith('Bearer ')) {
       return NextResponse.json(
@@ -31,7 +30,6 @@ export async function DELETE(
 
     const userId = decoded.userId
 
-    // التحقق من وجود معرف الصديق
     if (!friendId) {
       return NextResponse.json(
         { error: 'معرف الصديق مطلوب' },
@@ -39,7 +37,6 @@ export async function DELETE(
       )
     }
 
-    // منع المستخدم من إزالة نفسه
     if (userId === friendId) {
       return NextResponse.json(
         { error: 'لا يمكن إزالة نفسك' },
@@ -53,7 +50,8 @@ export async function DELETE(
         OR: [
           { user1Id: userId, user2Id: friendId },
           { user1Id: friendId, user2Id: userId }
-        ]
+        ],
+        status: 'ACCEPTED'
       }
     })
 
@@ -67,6 +65,16 @@ export async function DELETE(
     // حذف علاقة الصداقة
     await prisma.friendship.delete({
       where: { id: friendship.id }
+    })
+
+    // حذف أي طلبات صداقة مرتبطة
+    await prisma.friendRequest.deleteMany({
+      where: {
+        OR: [
+          { senderId: userId, receiverId: friendId },
+          { senderId: friendId, receiverId: userId }
+        ]
+      }
     })
 
     return NextResponse.json({
