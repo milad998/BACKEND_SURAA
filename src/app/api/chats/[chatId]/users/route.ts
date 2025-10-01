@@ -130,6 +130,12 @@ export async function POST(
       )
     }
 
+    // جلب بيانات المستخدم الحالي للحصول على الاسم
+    const currentUser = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { name: true }
+    })
+
     // التحقق من وجود المستخدمين
     const existingUsers = await prisma.user.findMany({
       where: {
@@ -200,7 +206,7 @@ export async function POST(
           data: {
             chatId,
             chatName: chatMember.chat.name,
-            inviterName: decoded.name || 'مستخدم'
+            inviterName: currentUser?.name || 'مستخدم'
           }
         }))
       })
