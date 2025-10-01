@@ -5,7 +5,6 @@ import { verifyToken } from '@/lib/auth-utils'
 
 export async function POST(request: NextRequest) {
   try {
-    // التحقق من التوكن
     const authHeader = request.headers.get('authorization')
     if (!authHeader?.startsWith('Bearer ')) {
       return NextResponse.json(
@@ -34,7 +33,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // التحقق من عدم إرسال طلب إلى النفس
     if (userId === receiverId) {
       return NextResponse.json(
         { error: 'لا يمكن إرسال طلب صداقة إلى نفسك' },
@@ -44,8 +42,7 @@ export async function POST(request: NextRequest) {
 
     // التحقق من وجود المستلم
     const receiver = await prisma.user.findUnique({
-      where: { id: receiverId },
-      select: { id: true, name: true, username: true }
+      where: { id: receiverId }
     })
 
     if (!receiver) {
@@ -75,9 +72,7 @@ export async function POST(request: NextRequest) {
           errorMessage = 'لديك طلب صداقة وارد من هذا المستخدم'
         }
       } else if (existingRequest.status === 'ACCEPTED') {
-        errorMessage = 'أنتم أصدقاء بالفعل'
-      } else if (existingRequest.status === 'REJECTED') {
-        errorMessage = 'تم رفض طلب الصداقة مسبقاً'
+        errorMessage = 'تم قبول طلب الصداقة مسبقاً'
       }
 
       return NextResponse.json(
@@ -173,17 +168,6 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('Send friend request error:', error)
-    
-    // معالجة أخطاء Prisma المحددة
-    if (error instanceof Error) {
-      if (error.message.includes('Unique constraint')) {
-        return NextResponse.json(
-          { error: 'طلب الصداقة موجود مسبقاً' },
-          { status: 400 }
-        )
-      }
-    }
-    
     return NextResponse.json(
       { error: 'حدث خطأ أثناء إرسال طلب الصداقة' },
       { status: 500 }
@@ -191,7 +175,6 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// دالة GET لجلب جميع طلبات الصداقة (اختياري)
 export async function GET(request: NextRequest) {
   try {
     const authHeader = request.headers.get('authorization')
@@ -215,20 +198,19 @@ export async function GET(request: NextRequest) {
     const userId = decoded.userId
 
     const { searchParams } = new URL(request.url)
-    const type = searchParams.get('type') || 'all' // all, sent, received
+    const type = searchParams.get('type') || 'received'
 
     let whereCondition = {}
 
     if (type === 'sent') {
-      whereCondition = { senderId: userId }
-    } else if (type === 'received') {
-      whereCondition = { receiverId: userId }
+      whereCondition = { 
+        senderId: userId,
+        status: 'PENDING'
+      }
     } else {
-      whereCondition = {
-        OR: [
-          { senderId: userId },
-          { receiverId: userId }
-        ]
+      whereCondition = { 
+        receiverId: userId,
+        status: 'PENDING'
       }
     }
 
