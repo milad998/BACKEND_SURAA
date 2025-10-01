@@ -5,7 +5,6 @@ import { verifyToken } from '@/lib/auth-utils'
 
 export async function GET(request: NextRequest) {
   try {
-    // التحقق من التوكن من الهيدر
     const authHeader = request.headers.get('authorization')
     if (!authHeader?.startsWith('Bearer ')) {
       return NextResponse.json(
@@ -29,7 +28,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const search = searchParams.get('search') || ''
 
-    // الحصول على الأصدقاء من كلا الجانبين
+    // جلب علاقات الصداقة المقبولة فقط
     const friendships = await prisma.friendship.findMany({
       where: {
         OR: [
@@ -61,20 +60,29 @@ export async function GET(request: NextRequest) {
             bio: true
           }
         }
-      }
+      },
+      orderBy: { updatedAt: 'desc' }
     })
 
     // استخراج معلومات الأصدقاء
     const friends = friendships.map(friendship => {
-      const friend = friendship.user1Id === userId ? friendship.user2 : friendship.user1
+      const isUser1 = friendship.user1Id === userId
+      const friend = isUser1 ? friendship.user2 : friendship.user1
+      
       return {
-        ...friend,
+        id: friend.id,
+        name: friend.name,
+        username: friend.username,
+        avatar: friend.avatar,
+        status: friend.status,
+        lastSeen: friend.lastSeen,
+        bio: friend.bio,
         friendshipId: friendship.id,
         friendsSince: friendship.createdAt
       }
     })
 
-    // البحث إذا كان هناك بحث
+    // التصفية حسب البحث
     const filteredFriends = search ? friends.filter(friend =>
       friend.name.toLowerCase().includes(search.toLowerCase()) ||
       friend.username?.toLowerCase().includes(search.toLowerCase())
