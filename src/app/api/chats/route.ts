@@ -19,17 +19,26 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // تحسين استعلام جلب المحادثات
     const chats = await prisma.chat.findMany({
       where: {
         users: {
           some: { userId: user.id }
-        }
+        },
+        isActive: true // المحادثات النشطة فقط
       },
       include: {
         users: {
           include: {
             user: {
-              select: { id: true, name: true, email: true, avatar: true, status: true }
+              select: { 
+                id: true, 
+                name: true, 
+                email: true, 
+                avatar: true, 
+                status: true,
+                username: true
+              }
             }
           }
         },
@@ -38,12 +47,18 @@ export async function GET(request: Request) {
           orderBy: { createdAt: 'desc' },
           include: {
             sender: {
-              select: { id: true, name: true, avatar: true }
+              select: { 
+                id: true, 
+                name: true, 
+                avatar: true 
+              }
             }
           }
         }
       },
-      orderBy: { updatedAt: 'desc' }
+      orderBy: { 
+        updatedAt: 'desc' 
+      }
     })
 
     return NextResponse.json(chats)
@@ -56,7 +71,7 @@ export async function GET(request: Request) {
   }
 }
 
-// دالة POST لإنشاء محادثة جديدة - تأكد من وجود هذا التصدير
+// دالة POST لإنشاء محادثة جديدة
 export async function POST(request: Request) {
   try {
     const authHeader = request.headers.get('authorization')
@@ -82,25 +97,68 @@ export async function POST(request: Request) {
       )
     }
 
-    // إضافة المستخدم الحالي إلى المحادثة
-    const allUserIds = [user.id, ...userIds]
+    // منع المستخدم من إضافة نفسه
+    const filteredUserIds = userIds.filter(id => id !== user.id)
+    const allUserIds = [user.id, ...filteredUserIds]
+
+    if (filteredUserIds.length === 0) {
+      return NextResponse.json(
+        { error: 'Cannot create chat with yourself only' },
+        { status: 400 }
+      )
+    }
+
+    // التحقق من وجود المستخدمين
+    const existingUsers = await prisma.user.findMany({
+      where: {
+        id: { in: allUserIds }
+      },
+      select: { id: true }
+    })
+
+    if (existingUsers.length !== allUserIds.length) {
+      return NextResponse.json(
+        { error: 'One or more users not found' },
+        { status: 404 }
+      )
+    }
+
+    // للمحادثات الجماعية، تأكد من وجود اسم
+    if (type === 'GROUP' && (!name || name.trim() === '')) {
+      return NextResponse.json(
+        { error: 'Group name is required' },
+        { status: 400 }
+      )
+    }
 
     // التحقق من محادثة خاصة مكررة
-    if (type === 'PRIVATE' && userIds.length === 1) {
+    if (type === 'PRIVATE' && filteredUserIds.length === 1) {
       const existingChat = await prisma.chat.findFirst({
         where: {
           type: 'PRIVATE',
-          users: {
-            every: {
-              userId: { in: allUserIds }
+          AND: [
+            {
+              users: {
+                some: { userId: user.id }
+              }
+            },
+            {
+              users: {
+                some: { userId: filteredUserIds[0] }
+              }
             }
-          }
+          ]
         },
         include: {
           users: {
             include: {
               user: {
-                select: { id: true, name: true, email: true }
+                select: { 
+                  id: true, 
+                  name: true, 
+                  email: true,
+                  username: true 
+                }
               }
             }
           }
@@ -115,11 +173,12 @@ export async function POST(request: Request) {
     // إنشاء المحادثة الجديدة
     const chat = await prisma.chat.create({
       data: {
-        name: type === 'GROUP' ? name : null,
+        name: type === 'PRIVATE' ? null : name,
         type,
         users: {
           create: allUserIds.map(userId => ({
-            user: { connect: { id: userId } }
+            userId,
+            role: userId === user.id ? 'OWNER' : 'MEMBER'
           }))
         }
       },
@@ -132,17 +191,50 @@ export async function POST(request: Request) {
                 name: true,
                 email: true,
                 avatar: true,
-                status: true
+                status: true,
+                username: true
               }
             }
           }
         },
         messages: {
           take: 1,
-          orderBy: { createdAt: 'desc' }
+          orderBy: { createdAt: 'desc' },
+          include: {
+            sender: {
+              select: {
+                id: true,
+                name: true,
+                avatar: true
+              }
+            }
+          }
         }
       }
     })
+
+    // إنشاء إشعارات للمستخدمين المضافين للمحادثة
+    if (type === 'GROUP') {
+      try {
+        await prisma.notification.createMany({
+          data: filteredUserIds.map(userId => ({
+            type: 'GROUP_INVITE',
+            title: 'دعوة لمجموعة جديدة',
+            message: `تمت إضافتك إلى مجموعة "${name}"`,
+            receiverId: userId,
+            senderId: user.id,
+            data: {
+              chatId: chat.id,
+              chatName: name,
+              inviterName: user.name
+            }
+          }))
+        })
+      } catch (notificationError) {
+        console.error('Failed to create notifications:', notificationError)
+        // لا نعيد خطأ هنا لأن المحادثة أنشئت بنجاح
+      }
+    }
 
     return NextResponse.json(chat, { status: 201 })
 
