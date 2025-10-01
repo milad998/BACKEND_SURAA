@@ -1,7 +1,7 @@
 // src/app/api/chats/[chatId]/users/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { verifyToken } from '@/lib/auth-utils'
+import { getUserFromToken } from '@/lib/auth-utils'
 
 // GET - جلب أعضاء المحادثة
 export async function GET(
@@ -17,13 +17,13 @@ export async function GET(
     }
 
     const token = authHeader.split(' ')[1]
-    const decoded = verifyToken(token)
+    const user = await getUserFromToken(token) // استخدام getUserFromToken بدلاً من verifyToken
     
-    if (!decoded) {
+    if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const userId = decoded.userId
+    const userId = user.id
 
     // التحقق من أن المستخدم عضو في المحادثة
     const chatMember = await prisma.chatUser.findFirst({
@@ -90,13 +90,13 @@ export async function POST(
     }
 
     const token = authHeader.split(' ')[1]
-    const decoded = verifyToken(token)
+    const user = await getUserFromToken(token) // استخدام getUserFromToken بدلاً من verifyToken
     
-    if (!decoded) {
+    if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const userId = decoded.userId
+    const userId = user.id
     const { userIds } = await request.json()
 
     if (!userIds || !Array.isArray(userIds) || userIds.length === 0) {
@@ -129,12 +129,6 @@ export async function POST(
         { status: 403 }
       )
     }
-
-    // جلب بيانات المستخدم الحالي للحصول على الاسم
-    const currentUser = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { name: true }
-    })
 
     // التحقق من وجود المستخدمين
     const existingUsers = await prisma.user.findMany({
@@ -206,7 +200,7 @@ export async function POST(
           data: {
             chatId,
             chatName: chatMember.chat.name,
-            inviterName: currentUser?.name || 'مستخدم'
+            inviterName: user.name || 'مستخدم' // استخدام user.name من getUserFromToken
           }
         }))
       })
@@ -239,13 +233,13 @@ export async function DELETE(
     }
 
     const token = authHeader.split(' ')[1]
-    const decoded = verifyToken(token)
+    const user = await getUserFromToken(token) // استخدام getUserFromToken بدلاً من verifyToken
     
-    if (!decoded) {
+    if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const userId = decoded.userId
+    const userId = user.id
     const { userIds } = await request.json()
 
     if (!userIds || !Array.isArray(userIds) || userIds.length === 0) {
