@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { encrypt, decrypt } from '@/lib/utils'
-import { getUserFromToken } from '@/lib/auth-utils'
+import { verifyToken } from '@/lib/auth-utils'
 
 export async function GET(request: NextRequest) {
   try {
@@ -13,11 +13,13 @@ export async function GET(request: NextRequest) {
     }
 
     const token = authHeader.replace('Bearer ', '')
-    const user = await getUserFromToken(token)
+    const decoded = verifyToken(token)
 
-    if (!user) {
+    if (!decoded) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+
+    const userId = decoded.userId
 
     const { searchParams } = new URL(request.url)
     const chatId = searchParams.get('chatId')
@@ -32,24 +34,21 @@ export async function GET(request: NextRequest) {
     }
 
     // التحقق من أن المستخدم عضو في المحادثة
-    const chat = await prisma.chat.findFirst({
+    const chatMember = await prisma.chatUser.findFirst({
       where: {
-        id: chatId,
-        users: {
-          some: {
-            userId: user.id
-          }
-        }
+        chatId,
+        userId
       }
     })
 
-    if (!chat) {
+    if (!chatMember) {
       return NextResponse.json(
         { error: 'Chat not found or access denied' },
         { status: 404 }
       )
     }
 
+    // جلب الرسائل مع دعم الردود
     const messages = await prisma.message.findMany({
       where: {
         chatId,
@@ -60,7 +59,19 @@ export async function GET(request: NextRequest) {
           select: {
             id: true,
             name: true,
-            avatar: true
+            avatar: true,
+            status: true
+          }
+        },
+        replyTo: {
+          include: {
+            sender: {
+              select: {
+                id: true,
+                name: true,
+                avatar: true
+              }
+            }
           }
         }
       },
@@ -73,7 +84,12 @@ export async function GET(request: NextRequest) {
     // فك تشفير الرسائل
     const decryptedMessages = messages.map(message => ({
       ...message,
-      content: message.encrypted ? decrypt(JSON.parse(message.content)) : message.content
+      content: message.encrypted ? decrypt(JSON.parse(message.content)) : message.content,
+      // فك تشفير محتوى الرسالة المردود عليها أيضاً
+      replyTo: message.replyTo ? {
+        ...message.replyTo,
+        content: message.replyTo.encrypted ? decrypt(JSON.parse(message.replyTo.content)) : message.replyTo.content
+      } : null
     }))
 
     return NextResponse.json({
@@ -98,13 +114,14 @@ export async function POST(request: NextRequest) {
     }
 
     const token = authHeader.replace('Bearer ', '')
-    const user = await getUserFromToken(token)
+    const decoded = verifyToken(token)
 
-    if (!user) {
+    if (!decoded) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { content, chatId, type = 'TEXT', receiverId, encrypted = true } = await request.json()
+    const userId = decoded.userId
+    const { content, chatId, type = 'TEXT', replyToId, encrypted = true } = await request.json()
 
     // التحقق من البيانات المطلوبة
     if (!content || !chatId) {
@@ -115,25 +132,37 @@ export async function POST(request: NextRequest) {
     }
 
     // التحقق من أن المستخدم عضو في المحادثة
-    const chat = await prisma.chat.findFirst({
+    const chatMember = await prisma.chatUser.findFirst({
       where: {
-        id: chatId,
-        users: {
-          some: {
-            userId: user.id
-          }
-        }
+        chatId,
+        userId
       }
     })
 
-    if (!chat) {
+    if (!chatMember) {
       return NextResponse.json(
         { error: 'Chat not found or access denied' },
         { status: 404 }
       )
     }
 
-    // استخدام let بدلاً من const للتحكم في التشفير
+    // التحقق من صحة الرد إذا تم إرساله
+    if (replyToId) {
+      const replyToMessage = await prisma.message.findFirst({
+        where: {
+          id: replyToId,
+          chatId
+        }
+      })
+
+      if (!replyToMessage) {
+        return NextResponse.json(
+          { error: 'Reply message not found' },
+          { status: 404 }
+        )
+      }
+    }
+
     let shouldEncrypt = encrypted
     let finalContent = content
 
@@ -143,7 +172,7 @@ export async function POST(request: NextRequest) {
         finalContent = JSON.stringify(encryptedData)
       } catch (error) {
         console.error('Encryption failed, sending as plain text:', error)
-        shouldEncrypt = false  // ← الآن يمكن التعديل لأنه let
+        shouldEncrypt = false
         finalContent = content
       }
     }
@@ -153,17 +182,29 @@ export async function POST(request: NextRequest) {
       data: {
         content: finalContent,
         type,
-        encrypted: shouldEncrypt,  // ← استخدام المتغير المعدل
-        senderId: user.id,
-        receiverId: receiverId || null,
-        chatId
+        encrypted: shouldEncrypt,
+        senderId: userId,
+        chatId,
+        replyToId: replyToId || null
       },
       include: {
         sender: {
           select: {
             id: true,
             name: true,
-            avatar: true
+            avatar: true,
+            status: true
+          }
+        },
+        replyTo: {
+          include: {
+            sender: {
+              select: {
+                id: true,
+                name: true,
+                avatar: true
+              }
+            }
           }
         }
       }
@@ -175,10 +216,24 @@ export async function POST(request: NextRequest) {
       data: { updatedAt: new Date() }
     })
 
-    // إرجاع الرسالة مع المحتوى الأصلي (غير مشفر) للعرض الفوري
+    // تحديث lastRead للمستخدم في المحادثة
+    await prisma.chatUser.update({
+      where: {
+        id: chatMember.id
+      },
+      data: {
+        lastRead: new Date()
+      }
+    })
+
+    // إرجاع الرسالة مع المحتوى الأصلي للعرض الفوري
     const responseMessage = {
       ...message,
-      content: shouldEncrypt ? content : message.content
+      content: shouldEncrypt ? content : message.content,
+      replyTo: message.replyTo ? {
+        ...message.replyTo,
+        content: message.replyTo.encrypted ? decrypt(JSON.parse(message.replyTo.content)) : message.replyTo.content
+      } : null
     }
 
     return NextResponse.json(responseMessage, { status: 201 })
@@ -200,12 +255,13 @@ export async function PUT(request: NextRequest) {
     }
 
     const token = authHeader.replace('Bearer ', '')
-    const user = await getUserFromToken(token)
+    const decoded = verifyToken(token)
 
-    if (!user) {
+    if (!decoded) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    const userId = decoded.userId
     const { messageId } = await request.json()
 
     if (!messageId) {
@@ -216,7 +272,7 @@ export async function PUT(request: NextRequest) {
     }
 
     // البحث عن الرسالة والتحقق من أن المستخدم عضو في المحادثة
-    const existingMessage = await prisma.message.findFirst({
+    const message = await prisma.message.findFirst({
       where: {
         id: messageId
       },
@@ -225,7 +281,7 @@ export async function PUT(request: NextRequest) {
           include: {
             users: {
               where: {
-                userId: user.id
+                userId: userId
               }
             }
           }
@@ -233,7 +289,7 @@ export async function PUT(request: NextRequest) {
       }
     })
 
-    if (!existingMessage) {
+    if (!message) {
       return NextResponse.json(
         { error: 'Message not found' },
         { status: 404 }
@@ -241,14 +297,14 @@ export async function PUT(request: NextRequest) {
     }
 
     // التحقق من أن المستخدم عضو في المحادثة
-    if (existingMessage.chat.users.length === 0) {
+    if (!message.chat.users.length) {
       return NextResponse.json(
         { error: 'You are not a member of this chat' },
         { status: 403 }
       )
     }
 
-    // تحديث الرسالة لجعل isRead = true
+    // تحديث حالة القراءة للرسالة
     const updatedMessage = await prisma.message.update({
       where: { id: messageId },
       data: {
@@ -294,11 +350,13 @@ export async function DELETE(request: NextRequest) {
     }
 
     const token = authHeader.replace('Bearer ', '')
-    const user = await getUserFromToken(token)
+    const decoded = verifyToken(token)
 
-    if (!user) {
+    if (!decoded) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+
+    const userId = decoded.userId
 
     const { searchParams } = new URL(request.url)
     const messageId = searchParams.get('messageId')
@@ -311,7 +369,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     // البحث عن الرسالة والتحقق من الملكية
-    const existingMessage = await prisma.message.findFirst({
+    const message = await prisma.message.findFirst({
       where: {
         id: messageId
       },
@@ -320,7 +378,7 @@ export async function DELETE(request: NextRequest) {
           include: {
             users: {
               where: {
-                userId: user.id
+                userId: userId
               }
             }
           }
@@ -329,7 +387,7 @@ export async function DELETE(request: NextRequest) {
       }
     })
 
-    if (!existingMessage) {
+    if (!message) {
       return NextResponse.json(
         { error: 'Message not found' },
         { status: 404 }
@@ -337,7 +395,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     // التحقق من أن المستخدم عضو في المحادثة
-    if (existingMessage.chat.users.length === 0) {
+    if (!message.chat.users.length) {
       return NextResponse.json(
         { error: 'You are not a member of this chat' },
         { status: 403 }
@@ -345,7 +403,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     // التحقق من الصلاحيات: فقط المرسل يمكنه حذف الرسالة
-    const isSender = existingMessage.senderId === user.id
+    const isSender = message.senderId === userId
 
     if (!isSender) {
       return NextResponse.json(
@@ -361,7 +419,7 @@ export async function DELETE(request: NextRequest) {
 
     // تحديث وقت آخر تعديل للمحادثة
     await prisma.chat.update({
-      where: { id: existingMessage.chatId },
+      where: { id: message.chatId },
       data: { updatedAt: new Date() }
     })
 
