@@ -8,7 +8,6 @@ export async function POST(
   { params }: { params: Promise<{ requestId: string }> }
 ) {
   try {
-    // استخراج params باستخدام await
     const { requestId } = await params
 
     const authHeader = request.headers.get('authorization')
@@ -41,13 +40,6 @@ export async function POST(
             name: true,
             username: true
           }
-        },
-        receiver: {
-          select: {
-            id: true,
-            name: true,
-            username: true
-          }
         }
       }
     })
@@ -67,7 +59,6 @@ export async function POST(
       )
     }
 
-    // التحقق من حالة الطلب
     if (friendRequest.status !== 'PENDING') {
       return NextResponse.json(
         { error: 'لا يمكن قبول طلب صداقة تمت معالجته مسبقاً' },
@@ -75,15 +66,15 @@ export async function POST(
       )
     }
 
-    // بدء transaction لضمان تكامل البيانات
+    // استخدام transaction
     const result = await prisma.$transaction(async (tx) => {
-      // تحديث حالة طلب الصداقة إلى ACCEPTED
+      // تحديث حالة طلب الصداقة
       const updatedRequest = await tx.friendRequest.update({
         where: { id: requestId },
         data: { status: 'ACCEPTED' }
       })
 
-      // إنشاء علاقة صداقة في جدول Friendship
+      // إنشاء علاقة صداقة
       const friendship = await tx.friendship.create({
         data: {
           user1Id: friendRequest.senderId,
@@ -92,7 +83,7 @@ export async function POST(
         }
       })
 
-      // حذف أي طلبات صداقة مكررة بين المستخدمين
+      // حذف أي طلبات مكررة
       await tx.friendRequest.deleteMany({
         where: {
           OR: [
@@ -107,7 +98,22 @@ export async function POST(
               status: 'PENDING'
             }
           ],
-          id: { not: requestId } // استثناء الطلب الحالي
+          id: { not: requestId }
+        }
+      })
+
+      // إنشاء إشعار للمرسل
+      await tx.notification.create({
+        data: {
+          type: 'FRIEND_REQUEST',
+          title: 'تم قبول طلب الصداقة',
+          message: `قبل ${friendRequest.receiver.name} طلب صداقتك`,
+          senderId: userId,
+          receiverId: friendRequest.senderId,
+          data: {
+            requestId: friendRequest.id,
+            friendshipId: friendship.id
+          }
         }
       })
 
@@ -119,24 +125,13 @@ export async function POST(
       friendship: {
         id: result.friendship.id,
         user1: friendRequest.sender,
-        user2: friendRequest.receiver,
+        user2: { id: userId, name: friendRequest.receiver.name },
         friendsSince: result.friendship.createdAt
       }
     }, { status: 200 })
 
   } catch (error) {
     console.error('Accept friend request error:', error)
-    
-    // معالجة الأخطاء المختلفة
-    if (error instanceof Error) {
-      if (error.message.includes('Unique constraint')) {
-        return NextResponse.json(
-          { error: 'أنتما صديقان بالفعل' },
-          { status: 400 }
-        )
-      }
-    }
-
     return NextResponse.json(
       { error: 'حدث خطأ أثناء قبول طلب الصداقة' },
       { status: 500 }
