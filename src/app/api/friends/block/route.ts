@@ -1,20 +1,29 @@
 // src/app/api/friends/block/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { authenticateRequest } from '@/lib/auth-utils'
+import { verifyToken } from '@/lib/auth-utils'
 
 export async function POST(request: NextRequest) {
   try {
-    // التحقق من المصادقة باستخدام التوكن
-    const authResult = authenticateRequest(request)
-    if (!authResult) {
+    const authHeader = request.headers.get('authorization')
+    if (!authHeader?.startsWith('Bearer ')) {
       return NextResponse.json(
-        { error: 'يجب تسجيل الدخول أولاً' },
+        { error: 'مطلوب توكن مصادقة' },
         { status: 401 }
       )
     }
 
-    const userId = authResult.userId
+    const token = authHeader.split(' ')[1]
+    const decoded = verifyToken(token)
+    
+    if (!decoded) {
+      return NextResponse.json(
+        { error: 'توكن غير صالح أو منتهي الصلاحية' },
+        { status: 401 }
+      )
+    }
+
+    const userId = decoded.userId
     const { userId: userToBlockId } = await request.json()
 
     if (!userToBlockId) {
@@ -24,7 +33,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // التحقق من عدم محاولة حظر النفس
     if (userId === userToBlockId) {
       return NextResponse.json(
         { error: 'لا يمكن حظر نفسك' },
@@ -44,41 +52,48 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // البحث عن أي علاقة صداقة موجودة
-    const existingFriendship = await prisma.friendship.findFirst({
-      where: {
-        OR: [
-          { user1Id: userId, user2Id: userToBlockId },
-          { user1Id: userToBlockId, user2Id: userId }
-        ]
-      }
-    })
-
-    if (existingFriendship) {
-      // تحديث حالة الصداقة إلى محظور
-      await prisma.friendship.update({
-        where: { id: existingFriendship.id },
-        data: { status: 'BLOCKED' }
-      })
-    } else {
-      // إنشاء علاقة محظورة جديدة
-      await prisma.friendship.create({
-        data: {
-          user1Id: userId,
-          user2Id: userToBlockId,
-          status: 'BLOCKED'
+    // استخدام transaction لضمان تكامل البيانات
+    const result = await prisma.$transaction(async (tx) => {
+      // البحث عن أي علاقة صداقة موجودة
+      const existingFriendship = await tx.friendship.findFirst({
+        where: {
+          OR: [
+            { user1Id: userId, user2Id: userToBlockId },
+            { user1Id: userToBlockId, user2Id: userId }
+          ]
         }
       })
-    }
 
-    // إلغاء أي طلبات صداقة pending بين المستخدمين
-    await prisma.friendRequest.deleteMany({
-      where: {
-        OR: [
-          { senderId: userId, receiverId: userToBlockId },
-          { senderId: userToBlockId, receiverId: userId }
-        ]
+      let friendship
+
+      if (existingFriendship) {
+        // تحديث حالة الصداقة إلى محظور
+        friendship = await tx.friendship.update({
+          where: { id: existingFriendship.id },
+          data: { status: 'BLOCKED' }
+        })
+      } else {
+        // إنشاء علاقة محظورة جديدة
+        friendship = await tx.friendship.create({
+          data: {
+            user1Id: userId,
+            user2Id: userToBlockId,
+            status: 'BLOCKED'
+          }
+        })
       }
+
+      // إلغاء أي طلبات صداقة pending بين المستخدمين
+      await tx.friendRequest.deleteMany({
+        where: {
+          OR: [
+            { senderId: userId, receiverId: userToBlockId },
+            { senderId: userToBlockId, receiverId: userId }
+          ]
+        }
+      })
+
+      return friendship
     })
 
     return NextResponse.json({
