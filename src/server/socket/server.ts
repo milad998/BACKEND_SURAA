@@ -13,7 +13,7 @@ export function initializeSocketIO(httpServer: NetServer) {
     path: '/api/socket/io',
     addTrailingSlash: false,
     cors: {
-      origin: process.env.NEXTAUTH_URL || "http://localhost:3000",
+      origin: process.env.NEXTAUTH_URL || "https://backend-suraa.vercel.app",
       methods: ["GET", "POST"]
     }
   })
