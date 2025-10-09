@@ -1,6 +1,5 @@
 import { Server as NetServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
-import { NextApiResponse } from 'next';
 
 export class SocketService {
   private static instance: SocketService;
@@ -15,13 +14,12 @@ export class SocketService {
     return SocketService.instance;
   }
 
-  // تهيئة Socket.io مع HTTP server
   public initializeServer(httpServer: NetServer) {
     if (this.io) {
       return this.io;
     }
 
-    console.log('🚀 Initializing Socket.IO server in App Router...');
+    console.log('🚀 Initializing Socket.IO server...');
     
     this.io = new SocketIOServer(httpServer, {
       path: '/api/socket',
@@ -59,11 +57,14 @@ export class SocketService {
 
       // حدث إرسال رسالة
       socket.on('send_message', (messageData: any) => {
-        const { roomId, message, userId } = messageData;
+        const { roomId, message, userId, username } = messageData;
         
         // بث الرسالة للغرفة
         this.io?.to(roomId).emit('new_message', {
-          ...messageData,
+          roomId,
+          message,
+          userId,
+          username,
           timestamp: new Date(),
           messageId: Math.random().toString(36).substr(2, 9)
         });
