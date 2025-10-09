@@ -5,12 +5,14 @@ export default function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
-  // التأكد من أن السيرفر مشغول
-  if (!res.socket.server.io) {
+  // التحقق الآمن من وجود socket و server
+  if (res.socket && res.socket.server && !res.socket.server.io) {
     console.log('🔧 Initializing Socket.io server...')
     initializeSocketIO(res.socket.server)
-  } else {
+  } else if (res.socket && res.socket.server && res.socket.server.io) {
     console.log('✅ Socket.io server already running')
+  } else {
+    console.log('❌ Socket not available')
   }
   
   res.end()
