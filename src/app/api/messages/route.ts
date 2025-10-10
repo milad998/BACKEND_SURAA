@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { encrypt, decrypt } from '@/lib/utils'
 import { verifyToken } from '@/lib/auth-utils'
+import { NotificationService } from '@/lib/notification-service'
 
 export async function GET(request: NextRequest) {
   try {
@@ -177,6 +178,52 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // جلب معلومات المرسل
+    const sender = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        name: true,
+        avatar: true
+      }
+    })
+
+    if (!sender) {
+      return NextResponse.json(
+        { error: 'Sender not found' },
+        { status: 404 }
+      )
+    }
+
+    // جلب معلومات المحادثة والأعضاء
+    const chat = await prisma.chat.findUnique({
+      where: { id: chatId },
+      include: {
+        users: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                settings: {
+                  select: {
+                    notifications: true
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    })
+
+    if (!chat) {
+      return NextResponse.json(
+        { error: 'Chat not found' },
+        { status: 404 }
+      )
+    }
+
     // إنشاء الرسالة
     const message = await prisma.message.create({
       data: {
@@ -225,6 +272,34 @@ export async function POST(request: NextRequest) {
         lastRead: new Date()
       }
     })
+
+    // إنشاء إشعارات للمستخدمين الآخرين في المحادثة
+    const otherChatUsers = chat.users.filter(chatUser => chatUser.userId !== userId)
+    
+    for (const chatUser of otherChatUsers) {
+      // التحقق من إعدادات الإشعارات للمستخدم (إذا كانت الإشعارات مفعلة)
+      const userSettings = await prisma.userSettings.findUnique({
+        where: { userId: chatUser.userId },
+        select: { notifications: true }
+      })
+
+      const shouldSendNotification = userSettings?.notifications !== false
+
+      if (shouldSendNotification) {
+        try {
+          await NotificationService.createNewMessageNotification(
+            sender,
+            chatUser.userId,
+            chatId,
+            content, // المحتوى الأصلي قبل التشفير
+            chat.type
+          )
+        } catch (error) {
+          console.error(`Failed to create notification for user ${chatUser.userId}:`, error)
+          // نستمر في محاولة إنشاء إشعارات للمستخدمين الآخرين حتى لو فشل أحدهم
+        }
+      }
+    }
 
     // إرجاع الرسالة مع المحتوى الأصلي للعرض الفوري
     const responseMessage = {
