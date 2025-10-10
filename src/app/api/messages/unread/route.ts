@@ -263,3 +263,83 @@ export async function POST(request: NextRequest) {
     )
   }
 }
+// دالة PUT/PATCH لتحديد جميع الرسائل غير المقروءة كمقروءة
+export async function PUT(request: NextRequest) {
+  try {
+    const authHeader = request.headers.get('authorization')
+    
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return NextResponse.json(
+        { error: 'مطلوب توكن مصادقة' },
+        { status: 401 }
+      )
+    }
+
+    const token = authHeader.replace('Bearer ', '')
+    const decoded = verifyToken(token)
+
+    if (!decoded) {
+      return NextResponse.json(
+        { error: 'توكن غير صالح أو منتهي الصلاحية' },
+        { status: 401 }
+      )
+    }
+
+    const userId = decoded.userId
+
+    // جلب جميع المحادثات التي يشارك فيها المستخدم
+    const userChats = await prisma.chatUser.findMany({
+      where: {
+        userId: userId
+      },
+      select: {
+        chatId: true
+      }
+    })
+
+    const chatIds = userChats.map(chat => chat.chatId)
+
+    // تحديث جميع الرسائل غير المقروءة في جميع محادثات المستخدم
+    const result = await prisma.message.updateMany({
+      where: {
+        chatId: {
+          in: chatIds
+        },
+        isRead: false,
+        senderId: {
+          not: userId // استبعاد الرسائل التي أرسلها المستخدم نفسه
+        }
+      },
+      data: {
+        isRead: true,
+        updatedAt: new Date()
+      }
+    })
+
+    // تحديث lastRead في جميع محادثات المستخدم
+    await prisma.chatUser.updateMany({
+      where: {
+        userId: userId,
+        chatId: {
+          in: chatIds
+        }
+      },
+      data: {
+        lastRead: new Date()
+      }
+    })
+
+    return NextResponse.json({
+      success: true,
+      message: `تم تحديد جميع الرسائل (${result.count}) كمقروءة`,
+      updatedCount: result.count
+    })
+
+  } catch (error) {
+    console.error('Error marking all messages as read:', error)
+    return NextResponse.json(
+      { error: 'حدث خطأ أثناء تحديد جميع الرسائل كمقروءة' },
+      { status: 500 }
+    )
+  }
+      }
