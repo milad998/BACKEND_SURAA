@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { verifyToken } from '@/lib/auth-utils'
 
-// GET - جلب إشعارات المستخدم
+// GET - جلب إشعارات المستخدم غير المقروءة فقط
 export async function GET(request: NextRequest) {
   try {
     const authHeader = request.headers.get('authorization')
@@ -22,26 +22,22 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url)
     const type = searchParams.get('type')
-    const isRead = searchParams.get('isRead')
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '20')
     const skip = (page - 1) * limit
 
-    // بناء شرط البحث
+    // بناء شرط البحث - الإشعارات غير المقروءة فقط
     const whereCondition: any = {
-      receiverId: userId
+      receiverId: userId,
+      isRead: false // فقط الإشعارات غير المقروءة
     }
 
     if (type) {
       whereCondition.type = type
     }
 
-    if (isRead !== null) {
-      whereCondition.isRead = isRead === 'true'
-    }
-
     const [notifications, totalCount] = await Promise.all([
-      // جلب الإشعارات
+      // جلب الإشعارات غير المقروءة فقط
       prisma.notification.findMany({
         where: whereCondition,
         include: {
@@ -59,21 +55,24 @@ export async function GET(request: NextRequest) {
         skip,
         take: limit
       }),
-      // عدد الإشعارات الإجمالي
+      // عدد الإشعارات غير المقروءة الإجمالي
       prisma.notification.count({
         where: whereCondition
       })
     ])
 
-    // إحصائيات الإشعارات
+    // إحصائيات الإشعارات غير المقروءة فقط
     const stats = await prisma.notification.groupBy({
-      by: ['type', 'isRead'],
-      where: { receiverId: userId },
+      by: ['type'],
+      where: { 
+        receiverId: userId,
+        isRead: false 
+      },
       _count: true
     })
 
     return NextResponse.json({
-      message: 'Notifications retrieved successfully',
+      message: 'Unread notifications retrieved successfully',
       notifications,
       pagination: {
         page,
@@ -84,18 +83,14 @@ export async function GET(request: NextRequest) {
       },
       stats: {
         total: totalCount,
-        unread: await prisma.notification.count({
-          where: { receiverId: userId, isRead: false }
-        }),
         byType: stats.reduce((acc, stat) => {
-          if (!acc[stat.type]) acc[stat.type] = { read: 0, unread: 0 }
-          acc[stat.type][stat.isRead ? 'read' : 'unread'] = stat._count
+          acc[stat.type] = stat._count
           return acc
         }, {} as any)
       }
     })
   } catch (error) {
-    console.error('Get notifications error:', error)
+    console.error('Get unread notifications error:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
