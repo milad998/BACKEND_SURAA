@@ -74,6 +74,53 @@ export async function POST(
       )
     }
 
+    // التحقق من وجود صداقة مسبقة
+    const existingFriendship = await prisma.friendship.findFirst({
+      where: {
+        OR: [
+          {
+            user1Id: friendRequest.senderId,
+            user2Id: friendRequest.receiverId
+          },
+          {
+            user1Id: friendRequest.receiverId,
+            user2Id: friendRequest.senderId
+          }
+        ],
+        status: 'ACCEPTED'
+      }
+    })
+
+    if (existingFriendship) {
+      // إذا كانت الصداقة موجودة مسبقاً، نقوم بتحديث طلب الصداقة وحذف الطلبات الأخرى
+      await prisma.friendRequest.update({
+        where: { id: requestId },
+        data: { status: 'ACCEPTED' }
+      })
+
+      await prisma.friendRequest.deleteMany({
+        where: {
+          OR: [
+            {
+              senderId: friendRequest.senderId,
+              receiverId: friendRequest.receiverId,
+              status: 'PENDING'
+            },
+            {
+              senderId: friendRequest.receiverId,
+              receiverId: friendRequest.senderId,
+              status: 'PENDING'
+            }
+          ]
+        }
+      })
+
+      return NextResponse.json(
+        { error: 'أنتما صديقان بالفعل' },
+        { status: 400 }
+      )
+    }
+
     // بدء transaction لضمان تكامل البيانات
     const result = await prisma.$transaction(async (tx) => {
       // تحديث حالة طلب الصداقة إلى ACCEPTED
@@ -115,12 +162,13 @@ export async function POST(
         data: {
           type: 'FRIEND_REQUEST',
           title: 'تم قبول طلب الصداقة',
-          message: `قبل ${friendRequest.receiver.name} طلب صداقتك`, // الآن receiver موجود
+          message: `قبل ${friendRequest.receiver.name} طلب صداقتك`,
           senderId: userId,
           receiverId: friendRequest.senderId,
           data: {
             requestId: friendRequest.id,
-            friendshipId: friendship.id
+            friendshipId: friendship.id,
+            type: 'FRIEND_REQUEST_ACCEPTED'
           }
         }
       })
@@ -134,6 +182,7 @@ export async function POST(
         id: result.friendship.id,
         user1: friendRequest.sender,
         user2: friendRequest.receiver,
+        status: result.friendship.status,
         friendsSince: result.friendship.createdAt
       }
     }, { status: 200 })
@@ -143,10 +192,19 @@ export async function POST(
     
     // معالجة الأخطاء المختلفة
     if (error instanceof Error) {
-      if (error.message.includes('Unique constraint')) {
+      // معالجة أخطاء القيود الفريدة في Prisma
+      if (error.message.includes('Unique constraint') || error.message.includes('P2002')) {
         return NextResponse.json(
-          { error: 'أنتما صديقان بالفعل' },
+          { error: 'علاقة الصداقة موجودة مسبقاً' },
           { status: 400 }
+        )
+      }
+      
+      // معالجة أخطاء المفاتيح الخارجية
+      if (error.message.includes('Foreign key constraint') || error.message.includes('P2003')) {
+        return NextResponse.json(
+          { error: 'المستخدم غير موجود' },
+          { status: 404 }
         )
       }
     }
