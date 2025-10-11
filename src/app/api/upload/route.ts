@@ -1,73 +1,89 @@
 // src/app/api/upload/route.ts
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth/next'
-import { authOptions } from '@/lib/auth'
-import { writeFile, mkdir } from 'fs/promises'
+import { verifyToken } from '@/lib/auth-utils'
+import cloudinary from '@/lib/cloudinary'
+import { writeFile } from 'fs/promises'
 import path from 'path'
 import { v4 as uuidv4 } from 'uuid'
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions)
+    const authHeader = request.headers.get('authorization')
     
-    if (!session) {
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const token = authHeader.replace('Bearer ', '')
+    const decoded = verifyToken(token)
+
+    if (!decoded) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const formData = await request.formData()
     const file = formData.get('file') as File
-    const type = formData.get('type') as string
+    const chatId = formData.get('chatId') as string
 
-    if (!file) {
+    if (!file || !chatId) {
       return NextResponse.json(
-        { error: 'No file provided' },
-        { status: 400 }
-      )
-    }
-
-    // التحقق من نوع الملف
-    const allowedTypes = ['image', 'video', 'audio']
-    if (!allowedTypes.includes(type)) {
-      return NextResponse.json(
-        { error: 'Invalid file type' },
+        { error: 'File and chat ID are required' },
         { status: 400 }
       )
     }
 
     // التحقق من حجم الملف
-    const maxSize = type === 'image' ? 5 * 1024 * 1024 : // 5MB للصور
-                   type === 'audio' ? 10 * 1024 * 1024 : // 10MB للصوت
-                   20 * 1024 * 1024 // 20MB للفيديو
-
-    if (file.size > maxSize) {
+    if (file.size > 10 * 1024 * 1024) {
       return NextResponse.json(
-        { error: 'File too large' },
+        { error: 'File size must be less than 10MB' },
         { status: 400 }
       )
     }
 
+    // تحديد نوع الوسائط
+    let mediaType: 'IMAGE' | 'VIDEO' | 'FILE' | 'AUDIO' = 'FILE'
+    if (file.type.startsWith('image/')) {
+      mediaType = 'IMAGE'
+    } else if (file.type.startsWith('video/')) {
+      mediaType = 'VIDEO'
+    } else if (file.type.startsWith('audio/')) {
+      mediaType = 'AUDIO'
+    }
+
+    // تحويل الملف إلى buffer
     const bytes = await file.arrayBuffer()
     const buffer = Buffer.from(bytes)
 
-    // إنشاء مجلد إذا لم يكن موجوداً
-    const uploadDir = path.join(process.cwd(), 'public/uploads', type)
-    await mkdir(uploadDir, { recursive: true })
+    // رفع الملف إلى Cloudinary
+    const result = await new Promise<any>((resolve, reject) => {
+      const uploadStream = cloudinary.uploader.upload_stream(
+        {
+          resource_type: mediaType === 'VIDEO' || mediaType === 'AUDIO' ? 'video' : 'auto',
+          folder: `chat-app/${chatId}`,
+          public_id: `${uuidv4()}-${file.name}`,
+        },
+        (error, result) => {
+          if (error) reject(error)
+          else resolve(result)
+        }
+      )
+      uploadStream.end(buffer)
+    })
 
-    // إنشاء اسم فريد للملف
-    const fileExt = path.extname(file.name)
-    const fileName = `${uuidv4()}${fileExt}`
-    const filePath = path.join(uploadDir, fileName)
-
-    // حفظ الملف
-    await writeFile(filePath, buffer)
-
-    // إرجاع رابط الملف
-    const fileUrl = `/uploads/${type}/${fileName}`
-
-    return NextResponse.json({ url: fileUrl }, { status: 201 })
+    return NextResponse.json({
+      success: true,
+      mediaUrl: result.secure_url,
+      publicId: result.public_id,
+      mediaType,
+      format: result.format,
+      width: result.width,
+      height: result.height,
+      duration: result.duration,
+    })
   } catch (error) {
+    console.error('Error uploading file:', error)
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'File upload failed' },
       { status: 500 }
     )
   }
